@@ -81,10 +81,18 @@ public class StatesController : ControllerBase
     }
 
     [HttpDelete("{id}")]
-    public async Task<IActionResult> Delete(int id)
+    public async Task<IActionResult> Delete(string id)
     {
-        var state = await _db.States.FindAsync(id);
-        if (state == null) return NotFound();
+        State? state = null;
+        if (int.TryParse(id, out var intId))
+        {
+            state = await _db.States.FindAsync(intId);
+        }
+        if (state == null)
+        {
+            state = await _db.States.FirstOrDefaultAsync(s => s.StateId == id || s.Code.ToLower() == id.ToLower() || s.Name.ToLower() == id.ToLower());
+        }
+        if (state == null) return NotFound(new { message = $"State '{id}' not found." });
 
         _db.AuditLogs.Add(new SystemAuditLog
         {

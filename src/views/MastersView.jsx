@@ -413,7 +413,7 @@ export default function MastersView({ onNavigate }) {
                     <StatusBadge status={c.status || 'Active'} />
                   </td>
                   <td className="py-3 px-4 text-right">
-                    <button onClick={() => deleteCountry(c.id)} className="p-1 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded transition-colors" title="Delete Country">
+                    <button onClick={() => deleteCountry(c.id || c.countryId || c.code)} className="p-1 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded transition-colors" title="Delete Country">
                       <Icon name="Trash2" className="w-4 h-4" />
                     </button>
                   </td>
@@ -542,7 +542,7 @@ export default function MastersView({ onNavigate }) {
                     <StatusBadge status={s.status || 'Active'} />
                   </td>
                   <td className="py-3 px-4 text-right">
-                    <button onClick={() => deleteState(s.id)} className="p-1 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded transition-colors" title="Delete State">
+                    <button onClick={() => deleteState(s.id || s.stateId || s.code)} className="p-1 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded transition-colors" title="Delete State">
                       <Icon name="Trash2" className="w-4 h-4" />
                     </button>
                   </td>

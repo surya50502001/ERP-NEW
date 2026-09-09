@@ -77,10 +77,18 @@ public class CountriesController : ControllerBase
     }
 
     [HttpDelete("{id}")]
-    public async Task<IActionResult> Delete(int id)
+    public async Task<IActionResult> Delete(string id)
     {
-        var country = await _db.Countries.FindAsync(id);
-        if (country == null) return NotFound();
+        Country? country = null;
+        if (int.TryParse(id, out var intId))
+        {
+            country = await _db.Countries.FindAsync(intId);
+        }
+        if (country == null)
+        {
+            country = await _db.Countries.FirstOrDefaultAsync(c => c.CountryId == id || c.Code.ToLower() == id.ToLower() || c.Name.ToLower() == id.ToLower());
+        }
+        if (country == null) return NotFound(new { message = $"Country '{id}' not found." });
 
         _db.AuditLogs.Add(new SystemAuditLog
         {
