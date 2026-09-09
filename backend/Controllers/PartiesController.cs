@@ -36,13 +36,13 @@ public class PartiesController : ControllerBase
         }
 
         _db.Parties.Add(party);
-        _db.AuditLogs.Add(new AuditLog
+        _db.AuditLogs.Add(new SystemAuditLog
         {
-            EntityName = "Party",
+            Entity = "Party",
             Action = "CREATE",
-            EntityId = party.PartyId,
+            RecordId = party.PartyId,
             Details = $"Created party '{party.Name}'",
-            PerformedBy = "System User",
+            UserId = "System User",
             Timestamp = DateTime.UtcNow
         });
 
@@ -63,13 +63,13 @@ public class PartiesController : ControllerBase
         existing.Email = updated.Email;
         existing.Address = updated.Address;
 
-        _db.AuditLogs.Add(new AuditLog
+        _db.AuditLogs.Add(new SystemAuditLog
         {
-            EntityName = "Party",
+            Entity = "Party",
             Action = "UPDATE",
-            EntityId = existing.PartyId ?? id.ToString(),
+            RecordId = existing.PartyId ?? id.ToString(),
             Details = $"Updated party master '{existing.Name}'",
-            PerformedBy = "System User",
+            UserId = "System User",
             Timestamp = DateTime.UtcNow
         });
 
@@ -83,13 +83,13 @@ public class PartiesController : ControllerBase
         var party = await _db.Parties.FindAsync(id);
         if (party == null) return NotFound();
 
-        _db.AuditLogs.Add(new AuditLog
+        _db.AuditLogs.Add(new SystemAuditLog
         {
-            EntityName = "Party",
+            Entity = "Party",
             Action = "DELETE",
-            EntityId = party.PartyId ?? id.ToString(),
+            RecordId = party.PartyId ?? id.ToString(),
             Details = $"Deleted party master '{party.Name}'",
-            PerformedBy = "System User",
+            UserId = "System User",
             Timestamp = DateTime.UtcNow
         });
 

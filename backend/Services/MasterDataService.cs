@@ -171,7 +171,7 @@ public class MasterDataService : IMasterDataService
                 RateSr = "IR",
                 RateNo = maxRateNo + 1,
                 ItemCode = itemCode,
-                Ratedt = DateTime.UtcNow,
+                RateDt = DateTime.UtcNow,
                 Rate = dto.InitialRate,
                 EffectiveDt = DateTime.UtcNow,
                 Status = "A",

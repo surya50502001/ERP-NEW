@@ -36,13 +36,13 @@ public class PurchaseOrdersController : ControllerBase
         }
 
         _db.PurchaseOrders.Add(po);
-        _db.AuditLogs.Add(new AuditLog
+        _db.AuditLogs.Add(new SystemAuditLog
         {
-            EntityName = "PurchaseOrder",
+            Entity = "PurchaseOrder",
             Action = "CREATE",
-            EntityId = po.PoId,
+            RecordId = po.PoId,
             Details = $"Purchase Order created for supplier {po.SupplierName}.",
-            PerformedBy = "System User",
+            UserId = "System User",
             Timestamp = DateTime.UtcNow
         });
 
@@ -59,13 +59,13 @@ public class PurchaseOrdersController : ControllerBase
         existing.Status = updated.Status;
         existing.GrnId = updated.GrnId;
 
-        _db.AuditLogs.Add(new AuditLog
+        _db.AuditLogs.Add(new SystemAuditLog
         {
-            EntityName = "PurchaseOrder",
+            Entity = "PurchaseOrder",
             Action = "UPDATE",
-            EntityId = existing.PoId ?? existing.Id.ToString(),
+            RecordId = existing.PoId ?? existing.Id.ToString(),
             Details = $"Status updated to {updated.Status}, GRN: {updated.GrnId}",
-            PerformedBy = "System User",
+            UserId = "System User",
             Timestamp = DateTime.UtcNow
         });
 
@@ -79,13 +79,13 @@ public class PurchaseOrdersController : ControllerBase
         var po = await _db.PurchaseOrders.FindAsync(id);
         if (po == null) return NotFound();
 
-        _db.AuditLogs.Add(new AuditLog
+        _db.AuditLogs.Add(new SystemAuditLog
         {
-            EntityName = "PurchaseOrder",
+            Entity = "PurchaseOrder",
             Action = "DELETE",
-            EntityId = po.PoId ?? po.Id.ToString(),
+            RecordId = po.PoId ?? po.Id.ToString(),
             Details = $"Deleted PO {po.PoId} for {po.SupplierName}",
-            PerformedBy = "System User",
+            UserId = "System User",
             Timestamp = DateTime.UtcNow
         });
 

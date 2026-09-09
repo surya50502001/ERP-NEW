@@ -51,13 +51,13 @@ public class SalesInvoicesController : ControllerBase
         });
 
         _db.SalesInvoices.Add(inv);
-        _db.AuditLogs.Add(new AuditLog
+        _db.AuditLogs.Add(new SystemAuditLog
         {
-            EntityName = "SalesInvoice",
+            Entity = "SalesInvoice",
             Action = "CREATE",
-            EntityId = inv.InvoiceId,
+            RecordId = inv.InvoiceId,
             Details = $"Sales Invoice created for customer {inv.CustomerName} with total ₹{inv.TotalAmount:F2}.",
-            PerformedBy = "System User",
+            UserId = "System User",
             Timestamp = DateTime.UtcNow
         });
 
@@ -82,13 +82,13 @@ public class SalesInvoicesController : ControllerBase
             Detail = $"Invoice {inv.InvoiceId} has been approved."
         });
 
-        _db.AuditLogs.Add(new AuditLog
+        _db.AuditLogs.Add(new SystemAuditLog
         {
-            EntityName = "SalesInvoice",
+            Entity = "SalesInvoice",
             Action = "APPROVE",
-            EntityId = inv.InvoiceId ?? inv.Id.ToString(),
+            RecordId = inv.InvoiceId ?? inv.Id.ToString(),
             Details = $"Approved invoice for customer {inv.CustomerName}",
-            PerformedBy = "Store Manager",
+            UserId = "Store Manager",
             Timestamp = DateTime.UtcNow
         });
 
@@ -113,13 +113,13 @@ public class SalesInvoicesController : ControllerBase
             Detail = $"Invoice {inv.InvoiceId} rejected: {reason}"
         });
 
-        _db.AuditLogs.Add(new AuditLog
+        _db.AuditLogs.Add(new SystemAuditLog
         {
-            EntityName = "SalesInvoice",
+            Entity = "SalesInvoice",
             Action = "REJECT",
-            EntityId = inv.InvoiceId ?? inv.Id.ToString(),
+            RecordId = inv.InvoiceId ?? inv.Id.ToString(),
             Details = $"Rejected invoice: {reason}",
-            PerformedBy = "Store Manager",
+            UserId = "Store Manager",
             Timestamp = DateTime.UtcNow
         });
 

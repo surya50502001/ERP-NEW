@@ -36,13 +36,13 @@ public class ProductsController : ControllerBase
         }
 
         _db.Products.Add(product);
-        _db.AuditLogs.Add(new AuditLog
+        _db.AuditLogs.Add(new SystemAuditLog
         {
-            EntityName = "Product",
+            Entity = "Product",
             Action = "CREATE",
-            EntityId = product.ProductId,
+            RecordId = product.ProductId,
             Details = $"Created item master '{product.Name}' ({product.ProductId})",
-            PerformedBy = "System User",
+            UserId = "System User",
             Timestamp = DateTime.UtcNow
         });
 
@@ -75,13 +75,13 @@ public class ProductsController : ControllerBase
         existing.Status = updated.Status;
         existing.Description = updated.Description;
 
-        _db.AuditLogs.Add(new AuditLog
+        _db.AuditLogs.Add(new SystemAuditLog
         {
-            EntityName = "Product",
+            Entity = "Product",
             Action = "UPDATE",
-            EntityId = existing.ProductId ?? id.ToString(),
+            RecordId = existing.ProductId ?? id.ToString(),
             Details = $"Updated item master details for '{existing.Name}'",
-            PerformedBy = "System User",
+            UserId = "System User",
             Timestamp = DateTime.UtcNow
         });
 
@@ -95,13 +95,13 @@ public class ProductsController : ControllerBase
         var prod = await _db.Products.FindAsync(id);
         if (prod == null) return NotFound();
 
-        _db.AuditLogs.Add(new AuditLog
+        _db.AuditLogs.Add(new SystemAuditLog
         {
-            EntityName = "Product",
+            Entity = "Product",
             Action = "DELETE",
-            EntityId = prod.ProductId ?? id.ToString(),
+            RecordId = prod.ProductId ?? id.ToString(),
             Details = $"Deleted item master '{prod.Name}'",
-            PerformedBy = "System User",
+            UserId = "System User",
             Timestamp = DateTime.UtcNow
         });
 
