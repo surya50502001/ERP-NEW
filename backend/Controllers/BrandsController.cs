@@ -21,16 +21,49 @@ public class BrandsController : ControllerBase
     [HttpPost]
     public async Task<ActionResult<Brand>> Create([FromBody] Brand brand)
     {
+        if (string.IsNullOrWhiteSpace(brand.BrandId))
+        {
+            var count = await _db.Brands.CountAsync() + 1;
+            brand.BrandId = $"BR{count:D4}";
+        }
         _db.Brands.Add(brand);
         await _db.SaveChangesAsync();
         return CreatedAtAction(nameof(GetAll), new { id = brand.Id }, brand);
     }
 
-    [HttpDelete("{id}")]
-    public async Task<IActionResult> Delete(int id)
+    [HttpPut("{id}")]
+    public async Task<IActionResult> Update(string id, [FromBody] Brand updated)
     {
-        var brand = await _db.Brands.FindAsync(id);
+        Brand? brand = null;
+        if (int.TryParse(id, out var intId))
+        {
+            brand = await _db.Brands.FindAsync(intId);
+        }
+        if (brand == null)
+        {
+            brand = await _db.Brands.FirstOrDefaultAsync(b => b.BrandId == id || b.Name.ToLower() == id.ToLower());
+        }
+        if (brand == null) return NotFound(new { message = $"Brand '{id}' not found." });
+
+        brand.Name = updated.Name;
+        await _db.SaveChangesAsync();
+        return Ok(brand);
+    }
+
+    [HttpDelete("{id}")]
+    public async Task<IActionResult> Delete(string id)
+    {
+        Brand? brand = null;
+        if (int.TryParse(id, out var intId))
+        {
+            brand = await _db.Brands.FindAsync(intId);
+        }
+        if (brand == null)
+        {
+            brand = await _db.Brands.FirstOrDefaultAsync(b => b.BrandId == id || b.Name.ToLower() == id.ToLower());
+        }
         if (brand == null) return NotFound();
+
         _db.Brands.Remove(brand);
         await _db.SaveChangesAsync();
         return NoContent();

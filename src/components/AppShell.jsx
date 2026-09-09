@@ -31,6 +31,9 @@ export default function AppShell({ currentTab, onNavigate, children }) {
   const unreadCount = (state.notifications || []).filter((n) => n.unread).length;
 
   const handleNavClick = (id) => {
+    if (erp?.triggerNavReset) {
+      erp.triggerNavReset(id);
+    }
     onNavigate(id);
     setMobileMenuOpen(false);
   };
@@ -111,7 +114,7 @@ export default function AppShell({ currentTab, onNavigate, children }) {
         >
           <div className="h-14 px-4 border-b border-slate-100 flex items-center justify-between">
             {!sidebarCollapsed && (
-              <div className="flex items-center gap-2.5 cursor-pointer" onClick={() => onNavigate("dashboard")}>
+              <div className="flex items-center gap-2.5 cursor-pointer" onClick={() => handleNavClick("dashboard")}>
                 <div className="w-7 h-7 rounded-lg bg-slate-900 text-white flex items-center justify-center font-bold text-xs shadow-sm">
                   E
                 </div>
@@ -126,7 +129,7 @@ export default function AppShell({ currentTab, onNavigate, children }) {
               </div>
             )}
             {sidebarCollapsed && (
-              <div className="w-7 h-7 mx-auto rounded-lg bg-slate-900 text-white flex items-center justify-center font-bold text-xs">
+              <div className="w-7 h-7 mx-auto rounded-lg bg-slate-900 text-white flex items-center justify-center font-bold text-xs cursor-pointer" onClick={() => handleNavClick("dashboard")}>
                 E
               </div>
             )}
@@ -147,7 +150,7 @@ export default function AppShell({ currentTab, onNavigate, children }) {
               return (
                 <button
                   key={item.id}
-                  onClick={() => onNavigate(item.id)}
+                  onClick={() => handleNavClick(item.id)}
                   title={sidebarCollapsed ? item.label : undefined}
                   className={`w-full flex items-center ${sidebarCollapsed ? "justify-center px-0" : "px-3"} py-2 rounded-lg text-xs font-semibold transition-all duration-150 cursor-pointer ${
                     isActive

@@ -51,35 +51,43 @@ public class ProductsController : ControllerBase
     }
 
     [HttpPut("{id}")]
-    public async Task<IActionResult> Update(int id, [FromBody] Product updated)
+    public async Task<IActionResult> Update(string id, [FromBody] Product updated)
     {
-        var existing = await _db.Products.FindAsync(id);
+        Product? existing = null;
+        if (int.TryParse(id, out int numId))
+        {
+            existing = await _db.Products.FindAsync(numId);
+        }
+        if (existing == null)
+        {
+            existing = await _db.Products.FirstOrDefaultAsync(p => p.ProductId == id || p.Name == id);
+        }
         if (existing == null) return NotFound();
 
-        existing.ProductId = updated.ProductId;
-        existing.Name = updated.Name;
-        existing.ItemType = updated.ItemType;
-        existing.Brand = updated.Brand;
-        existing.Uom = updated.Uom;
-        existing.MajorGroup = updated.MajorGroup;
-        existing.SubGroup = updated.SubGroup;
-        existing.SubSubGroup = updated.SubSubGroup;
+        existing.ProductId = updated.ProductId ?? existing.ProductId;
+        existing.Name = updated.Name ?? existing.Name;
+        existing.ItemType = updated.ItemType ?? existing.ItemType;
+        existing.Brand = updated.Brand ?? existing.Brand;
+        existing.Uom = updated.Uom ?? existing.Uom;
+        existing.MajorGroup = updated.MajorGroup ?? existing.MajorGroup;
+        existing.SubGroup = updated.SubGroup ?? existing.SubGroup;
+        existing.SubSubGroup = updated.SubSubGroup ?? existing.SubSubGroup;
         existing.AvailableStock = updated.AvailableStock;
         existing.MinReorderLevel = updated.MinReorderLevel;
         existing.AvgRate = updated.AvgRate;
         existing.PurchaseRate = updated.PurchaseRate;
         existing.SellingPrice = updated.SellingPrice;
         existing.StockValue = updated.StockValue;
-        existing.HsnCode = updated.HsnCode;
+        existing.HsnCode = updated.HsnCode ?? existing.HsnCode;
         existing.GstRate = updated.GstRate;
-        existing.Status = updated.Status;
-        existing.Description = updated.Description;
+        existing.Status = updated.Status ?? existing.Status;
+        existing.Description = updated.Description ?? existing.Description;
 
         _db.AuditLogs.Add(new SystemAuditLog
         {
             Entity = "Product",
             Action = "UPDATE",
-            RecordId = existing.ProductId ?? id.ToString(),
+            RecordId = existing.ProductId ?? existing.Id.ToString(),
             Details = $"Updated item master details for '{existing.Name}'",
             UserId = "System User",
             Timestamp = DateTime.UtcNow
@@ -90,16 +98,24 @@ public class ProductsController : ControllerBase
     }
 
     [HttpDelete("{id}")]
-    public async Task<IActionResult> Delete(int id)
+    public async Task<IActionResult> Delete(string id)
     {
-        var prod = await _db.Products.FindAsync(id);
+        Product? prod = null;
+        if (int.TryParse(id, out int numId))
+        {
+            prod = await _db.Products.FindAsync(numId);
+        }
+        if (prod == null)
+        {
+            prod = await _db.Products.FirstOrDefaultAsync(p => p.ProductId == id || p.Name == id);
+        }
         if (prod == null) return NotFound();
 
         _db.AuditLogs.Add(new SystemAuditLog
         {
             Entity = "Product",
             Action = "DELETE",
-            RecordId = prod.ProductId ?? id.ToString(),
+            RecordId = prod.ProductId ?? prod.Id.ToString(),
             Details = $"Deleted item master '{prod.Name}'",
             UserId = "System User",
             Timestamp = DateTime.UtcNow

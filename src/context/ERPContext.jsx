@@ -48,6 +48,8 @@ function loadInitialState() {
         if (!parsed.itemTypes) parsed.itemTypes = INITIAL_ERP_DATA.itemTypes;
         if (!parsed.brands) parsed.brands = INITIAL_ERP_DATA.brands;
         if (!parsed.categories) parsed.categories = INITIAL_ERP_DATA.categories;
+        if (!parsed.countries) parsed.countries = INITIAL_ERP_DATA.countries;
+        if (!parsed.states) parsed.states = INITIAL_ERP_DATA.states;
         return parsed;
       }
     }
@@ -79,16 +81,33 @@ function erpReducer(state, action) {
     }
     case 'ADD_PARTY': {
       const newParty = {
-        id: `PTY-${100 + (state.parties?.length || 0) + 1}`,
+        id: action.payload.id || `PTY-${100 + (state.parties?.length || 0) + 1}`,
         status: 'Active',
         ...action.payload
       };
       newState = { ...state, parties: [newParty, ...(state.parties || [])] };
       break;
     }
+    case 'UPDATE_PARTY': {
+      const updated = action.payload;
+      newState = {
+        ...state,
+        parties: (state.parties || []).map(p =>
+          (p.id === updated.id || (updated.partyId && p.partyId === updated.partyId)) ? { ...p, ...updated } : p
+        )
+      };
+      break;
+    }
+    case 'DELETE_PARTY': {
+      newState = {
+        ...state,
+        parties: (state.parties || []).filter(p => p.id !== action.payload && p.partyId !== action.payload)
+      };
+      break;
+    }
     case 'ADD_PRODUCT': {
       const newProd = {
-        id: `PRD-00${(state.products?.length || 0) + 1}`,
+        id: action.payload.id || `PRD-00${(state.products?.length || 0) + 1}`,
         availableStock: parseFloat(action.payload.openingStock || 0),
         minReorderLevel: parseFloat(action.payload.minReorderLevel || 50),
         avgRate: parseFloat(action.payload.purchaseRate || 100),
@@ -115,6 +134,23 @@ function erpReducer(state, action) {
         ...state,
         products: [newProd, ...(state.products || [])],
         batches: updatedBatches
+      };
+      break;
+    }
+    case 'UPDATE_PRODUCT': {
+      const updated = action.payload;
+      newState = {
+        ...state,
+        products: (state.products || []).map(p =>
+          (p.id === updated.id || (updated.productId && p.productId === updated.productId)) ? { ...p, ...updated } : p
+        )
+      };
+      break;
+    }
+    case 'DELETE_PRODUCT': {
+      newState = {
+        ...state,
+        products: (state.products || []).filter(p => p.id !== action.payload && p.productId !== action.payload && p.name !== action.payload)
       };
       break;
     }
@@ -350,38 +386,57 @@ function erpReducer(state, action) {
     }
     case 'ADD_ITEM_TYPE': {
       const newItemType = {
-        id: `IT-${Date.now()}`,
+        id: action.payload.id || `IT-${Date.now()}`,
+        itemTypeId: action.payload.itemTypeId || `IT-${Date.now()}`,
         name: action.payload.name,
         code: action.payload.code || action.payload.name.substring(0, 3).toUpperCase()
       };
       newState = { ...state, itemTypes: [...(state.itemTypes || []), newItemType] };
       break;
     }
+    case 'UPDATE_ITEM_TYPE': {
+      const updated = action.payload;
+      newState = {
+        ...state,
+        itemTypes: (state.itemTypes || []).map(it => (it.id === updated.id || it.itemTypeId === updated.itemTypeId) ? { ...it, ...updated } : it)
+      };
+      break;
+    }
     case 'DELETE_ITEM_TYPE': {
       newState = {
         ...state,
-        itemTypes: (state.itemTypes || []).filter(it => it.id !== action.payload && it.name !== action.payload)
+        itemTypes: (state.itemTypes || []).filter(it => it.id !== action.payload && it.name !== action.payload && it.itemTypeId !== action.payload)
       };
       break;
     }
     case 'ADD_BRAND': {
       const newBrand = {
-        id: `BR-${Date.now()}`,
+        id: action.payload.id || `BR-${Date.now()}`,
+        brandId: action.payload.brandId || `BR-${Date.now()}`,
         name: action.payload.name
       };
       newState = { ...state, brands: [...(state.brands || []), newBrand] };
       break;
     }
+    case 'UPDATE_BRAND': {
+      const updated = action.payload;
+      newState = {
+        ...state,
+        brands: (state.brands || []).map(b => (b.id === updated.id || b.brandId === updated.brandId) ? { ...b, ...updated } : b)
+      };
+      break;
+    }
     case 'DELETE_BRAND': {
       newState = {
         ...state,
-        brands: (state.brands || []).filter(b => b.id !== action.payload && b.name !== action.payload)
+        brands: (state.brands || []).filter(b => b.id !== action.payload && b.name !== action.payload && b.brandId !== action.payload)
       };
       break;
     }
     case 'ADD_MAJOR_CATEGORY': {
       const newMaj = {
-        id: `MJ-${Date.now()}`,
+        id: action.payload.id || `MJ-${Date.now()}`,
+        majorId: action.payload.majorId || String(action.payload.id || Date.now()),
         name: action.payload.name,
         code: action.payload.code || action.payload.name.substring(0, 3).toUpperCase()
       };
@@ -395,21 +450,34 @@ function erpReducer(state, action) {
       };
       break;
     }
+    case 'UPDATE_MAJOR_CATEGORY': {
+      const updated = action.payload;
+      const cat = state.categories || { major: [], sub: [], subSub: [] };
+      newState = {
+        ...state,
+        categories: {
+          ...cat,
+          major: (cat.major || []).map(m => (m.id === updated.id || m.majorId === updated.majorId) ? { ...m, ...updated } : m)
+        }
+      };
+      break;
+    }
     case 'DELETE_MAJOR_CATEGORY': {
       const cat = state.categories || { major: [], sub: [], subSub: [] };
       newState = {
         ...state,
         categories: {
           ...cat,
-          major: (cat.major || []).filter(m => m.id !== action.payload && m.name !== action.payload)
+          major: (cat.major || []).filter(m => m.id !== action.payload && m.majorId !== action.payload && m.name !== action.payload)
         }
       };
       break;
     }
     case 'ADD_SUB_CATEGORY': {
       const newSub = {
-        id: `SB-${Date.now()}`,
-        majorId: action.payload.majorId,
+        id: action.payload.id || `SB-${Date.now()}`,
+        subId: action.payload.subId || String(action.payload.id || Date.now()),
+        majorId: String(action.payload.majorId),
         name: action.payload.name
       };
       const cat = state.categories || { major: [], sub: [], subSub: [] };
@@ -422,21 +490,34 @@ function erpReducer(state, action) {
       };
       break;
     }
+    case 'UPDATE_SUB_CATEGORY': {
+      const updated = action.payload;
+      const cat = state.categories || { major: [], sub: [], subSub: [] };
+      newState = {
+        ...state,
+        categories: {
+          ...cat,
+          sub: (cat.sub || []).map(s => (s.id === updated.id || s.subId === updated.subId) ? { ...s, ...updated } : s)
+        }
+      };
+      break;
+    }
     case 'DELETE_SUB_CATEGORY': {
       const cat = state.categories || { major: [], sub: [], subSub: [] };
       newState = {
         ...state,
         categories: {
           ...cat,
-          sub: (cat.sub || []).filter(s => s.id !== action.payload && s.name !== action.payload)
+          sub: (cat.sub || []).filter(s => s.id !== action.payload && s.subId !== action.payload && s.name !== action.payload)
         }
       };
       break;
     }
     case 'ADD_SUB_SUB_CATEGORY': {
       const newSubSub = {
-        id: `SSB-${Date.now()}`,
-        subId: action.payload.subId,
+        id: action.payload.id || `SSB-${Date.now()}`,
+        subSubId: action.payload.subSubId || String(action.payload.id || Date.now()),
+        subId: String(action.payload.subId),
         name: action.payload.name
       };
       const cat = state.categories || { major: [], sub: [], subSub: [] };
@@ -449,25 +530,53 @@ function erpReducer(state, action) {
       };
       break;
     }
+    case 'UPDATE_SUB_SUB_CATEGORY': {
+      const updated = action.payload;
+      const cat = state.categories || { major: [], sub: [], subSub: [] };
+      newState = {
+        ...state,
+        categories: {
+          ...cat,
+          subSub: (cat.subSub || []).map(ss => (ss.id === updated.id || ss.subSubId === updated.subSubId) ? { ...ss, ...updated } : ss)
+        }
+      };
+      break;
+    }
     case 'DELETE_SUB_SUB_CATEGORY': {
       const cat = state.categories || { major: [], sub: [], subSub: [] };
       newState = {
         ...state,
         categories: {
           ...cat,
-          subSub: (cat.subSub || []).filter(ss => ss.id !== action.payload && ss.name !== action.payload)
+          subSub: (cat.subSub || []).filter(ss => ss.id !== action.payload && ss.subSubId !== action.payload && ss.name !== action.payload)
         }
       };
       break;
     }
     case 'ADD_UOM': {
       const newUom = {
-        id: `UOM-${Date.now()}`,
+        id: action.payload.id || `UOM-${Date.now()}`,
+        uomId: action.payload.uomId || `UOM-${Date.now()}`,
         code: action.payload.code.toUpperCase(),
         name: action.payload.name,
         decimalPlaces: parseInt(action.payload.decimalPlaces || 0, 10)
       };
       newState = { ...state, uoms: [...(state.uoms || []), newUom] };
+      break;
+    }
+    case 'UPDATE_UOM': {
+      const updated = action.payload;
+      newState = {
+        ...state,
+        uoms: (state.uoms || []).map(u => (u.id === updated.id || u.uomId === updated.uomId) ? { ...u, ...updated } : u)
+      };
+      break;
+    }
+    case 'DELETE_UOM': {
+      newState = {
+        ...state,
+        uoms: (state.uoms || []).filter(u => u.id !== action.payload && u.code !== action.payload && u.uomId !== action.payload)
+      };
       break;
     }
     case 'ADD_COUNTRY': {
@@ -481,6 +590,18 @@ function erpReducer(state, action) {
         status: action.payload.status || 'Active'
       };
       newState = { ...state, countries: [...(state.countries || []), newCountry] };
+      break;
+    }
+    case 'UPDATE_COUNTRY': {
+      const updated = action.payload;
+      newState = {
+        ...state,
+        countries: (state.countries || []).map(c =>
+          (c.id === updated.id || (updated.countryId && c.countryId === updated.countryId) || (updated.code && c.code === updated.code))
+            ? { ...c, ...updated }
+            : c
+        )
+      };
       break;
     }
     case 'DELETE_COUNTRY': {
@@ -503,17 +624,22 @@ function erpReducer(state, action) {
       newState = { ...state, states: [...(state.states || []), newStateObj] };
       break;
     }
+    case 'UPDATE_STATE': {
+      const updated = action.payload;
+      newState = {
+        ...state,
+        states: (state.states || []).map(s =>
+          (s.id === updated.id || (updated.stateId && s.stateId === updated.stateId) || (updated.code && s.code === updated.code))
+            ? { ...s, ...updated }
+            : s
+        )
+      };
+      break;
+    }
     case 'DELETE_STATE': {
       newState = {
         ...state,
         states: (state.states || []).filter(s => s.id !== action.payload && s.stateId !== action.payload && s.code !== action.payload)
-      };
-      break;
-    }
-    case 'DELETE_UOM': {
-      newState = {
-        ...state,
-        uoms: (state.uoms || []).filter(u => u.id !== action.payload && u.code !== action.payload)
       };
       break;
     }
@@ -533,6 +659,11 @@ export function ERPProvider({ children }) {
   const [toasts, setToasts] = useState([]);
   const [isCmdPaletteOpen, setIsCmdPaletteOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [navResetCounter, setNavResetCounter] = useState(0);
+
+  const triggerNavReset = (tabId) => {
+    setNavResetCounter(prev => prev + 1);
+  };
 
   useEffect(() => {
     const handleKeyDown = (e) => {
@@ -590,7 +721,7 @@ export function ERPProvider({ children }) {
           }
         };
 
-        const [parties, products, brands, uoms, itemTypes, pos, invs, countries, states] = await Promise.all([
+        const [parties, products, brands, uoms, itemTypes, pos, invs, countries, states, majorCats, subCats, subSubCats] = await Promise.all([
           fetch('/api/parties').then(safeJson),
           fetch('/api/products').then(safeJson),
           fetch('/api/brands').then(safeJson),
@@ -599,21 +730,29 @@ export function ERPProvider({ children }) {
           fetch('/api/purchaseorders').then(safeJson),
           fetch('/api/salesinvoices').then(safeJson),
           fetch('/api/countries').then(safeJson),
-          fetch('/api/states').then(safeJson)
+          fetch('/api/states').then(safeJson),
+          fetch('/api/categories/major').then(safeJson),
+          fetch('/api/categories/sub').then(safeJson),
+          fetch('/api/categories/subsub').then(safeJson)
         ]);
 
         dispatch({
           type: 'SET_ALL_DATA',
           payload: {
-            parties,
-            products,
-            brands,
-            uoms,
-            itemTypes,
-            purchaseOrders: pos,
-            salesInvoices: invs,
-            countries: countries && countries.length > 0 ? countries : [],
-            states: states && states.length > 0 ? states : []
+            parties: parties || [],
+            products: products || [],
+            brands: brands || [],
+            uoms: uoms || [],
+            itemTypes: itemTypes || [],
+            purchaseOrders: pos || [],
+            salesInvoices: invs || [],
+            countries: (countries && countries.length > 0) ? countries : [],
+            states: (states && states.length > 0) ? states : [],
+            categories: {
+              major: (majorCats && majorCats.length > 0) ? majorCats : (state.categories?.major || []),
+              sub: (subCats && subCats.length > 0) ? subCats : (state.categories?.sub || []),
+              subSub: (subSubCats && subSubCats.length > 0) ? subSubCats : (state.categories?.subSub || [])
+            }
           }
         });
       } catch (err) {
@@ -685,8 +824,6 @@ export function ERPProvider({ children }) {
     showToast('Logged Out', 'You have been safely logged out.');
   };
 
-
-
   const addParty = async (partyData) => {
     try {
       const res = await fetch('/api/parties', {
@@ -709,6 +846,34 @@ export function ERPProvider({ children }) {
     }
   };
 
+  const updateParty = async (id, partyData) => {
+    try {
+      const res = await fetch(`/api/parties/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(partyData)
+      });
+      if (!res.ok) throw new Error('Server error');
+      dispatch({ type: 'UPDATE_PARTY', payload: { id, ...partyData } });
+      showToast('Party Updated', `Party details updated successfully.`);
+      return { success: true };
+    } catch (err) {
+      showToast('Update Failed', 'Could not update party on server.', 'error');
+      return { success: false };
+    }
+  };
+
+  const deleteParty = async (id) => {
+    try {
+      const res = await fetch(`/api/parties/${id}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error('Server error');
+      dispatch({ type: 'DELETE_PARTY', payload: id });
+      showToast('Party Removed', 'Party deleted.');
+    } catch (err) {
+      showToast('Deletion Failed', 'Could not delete party on server.', 'error');
+    }
+  };
+
   const addProduct = async (productData) => {
     try {
       const res = await fetch('/api/products', {
@@ -727,6 +892,36 @@ export function ERPProvider({ children }) {
       return { success: true, product: saved };
     } catch (err) {
       showToast('Creation Failed', err.message || 'Server error.', 'error');
+      return { success: false };
+    }
+  };
+
+  const updateProduct = async (id, productData) => {
+    try {
+      const res = await fetch(`/api/products/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(productData)
+      });
+      if (!res.ok) throw new Error('Server error');
+      dispatch({ type: 'UPDATE_PRODUCT', payload: { id, ...productData } });
+      showToast('Product Updated', `Item master updated successfully.`);
+      return { success: true };
+    } catch (err) {
+      showToast('Update Failed', 'Could not update item on server.', 'error');
+      return { success: false };
+    }
+  };
+
+  const deleteProduct = async (id) => {
+    try {
+      const res = await fetch(`/api/products/${id}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error('Server error');
+      dispatch({ type: 'DELETE_PRODUCT', payload: id });
+      showToast('Product Removed', 'Product deleted.');
+      return { success: true };
+    } catch (err) {
+      showToast('Deletion Failed', 'Could not delete product on server.', 'error');
       return { success: false };
     }
   };
@@ -818,8 +1013,28 @@ export function ERPProvider({ children }) {
       const saved = await safeParse(res);
       dispatch({ type: 'ADD_ITEM_TYPE', payload: saved });
       showToast('Item Type Created', `Item type "${name}" created.`);
+      return { success: true, itemType: saved };
     } catch (err) {
       showToast('Creation Failed', 'Could not create item type on server.', 'error');
+      return { success: false };
+    }
+  };
+
+  const updateItemType = async (id, data) => {
+    try {
+      const res = await fetch(`/api/itemtypes/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      });
+      if (!res.ok) throw new Error('Server error');
+      const saved = await safeParse(res);
+      dispatch({ type: 'UPDATE_ITEM_TYPE', payload: { id, ...data } });
+      showToast('Item Type Updated', `Item type updated successfully.`);
+      return { success: true };
+    } catch (err) {
+      showToast('Update Failed', 'Could not update item type on server.', 'error');
+      return { success: false };
     }
   };
 
@@ -845,8 +1060,27 @@ export function ERPProvider({ children }) {
       const saved = await safeParse(res);
       dispatch({ type: 'ADD_BRAND', payload: saved });
       showToast('Brand Created', `Brand "${name}" created.`);
+      return { success: true, brand: saved };
     } catch (err) {
       showToast('Creation Failed', 'Could not create brand on server.', 'error');
+      return { success: false };
+    }
+  };
+
+  const updateBrand = async (id, data) => {
+    try {
+      const res = await fetch(`/api/brands/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      });
+      if (!res.ok) throw new Error('Server error');
+      dispatch({ type: 'UPDATE_BRAND', payload: { id, ...data } });
+      showToast('Brand Updated', `Brand updated successfully.`);
+      return { success: true };
+    } catch (err) {
+      showToast('Update Failed', 'Could not update brand on server.', 'error');
+      return { success: false };
     }
   };
 
@@ -872,8 +1106,27 @@ export function ERPProvider({ children }) {
       const saved = await safeParse(res);
       dispatch({ type: 'ADD_MAJOR_CATEGORY', payload: saved });
       showToast('Major Group Created', `Major group "${name}" created.`);
+      return { success: true, category: saved };
     } catch (err) {
       showToast('Creation Failed', 'Could not create category on server.', 'error');
+      return { success: false };
+    }
+  };
+
+  const updateMajorCategory = async (id, data) => {
+    try {
+      const res = await fetch(`/api/categories/major/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      });
+      if (!res.ok) throw new Error('Server error');
+      dispatch({ type: 'UPDATE_MAJOR_CATEGORY', payload: { id, ...data } });
+      showToast('Major Group Updated', `Major group updated.`);
+      return { success: true };
+    } catch (err) {
+      showToast('Update Failed', 'Could not update category on server.', 'error');
+      return { success: false };
     }
   };
 
@@ -893,14 +1146,33 @@ export function ERPProvider({ children }) {
       const res = await fetch('/api/categories/sub', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ majorCategoryId: parseInt(majorId), name })
+        body: JSON.stringify({ majorId: String(majorId), name })
       });
       if (!res.ok) throw new Error('Server error');
       const saved = await safeParse(res);
       dispatch({ type: 'ADD_SUB_CATEGORY', payload: saved });
       showToast('Sub Group Created', `Sub group "${name}" created.`);
+      return { success: true, category: saved };
     } catch (err) {
       showToast('Creation Failed', 'Could not create category on server.', 'error');
+      return { success: false };
+    }
+  };
+
+  const updateSubCategory = async (id, data) => {
+    try {
+      const res = await fetch(`/api/categories/sub/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      });
+      if (!res.ok) throw new Error('Server error');
+      dispatch({ type: 'UPDATE_SUB_CATEGORY', payload: { id, ...data } });
+      showToast('Sub Group Updated', `Sub group updated.`);
+      return { success: true };
+    } catch (err) {
+      showToast('Update Failed', 'Could not update category on server.', 'error');
+      return { success: false };
     }
   };
 
@@ -920,14 +1192,33 @@ export function ERPProvider({ children }) {
       const res = await fetch('/api/categories/subsub', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ subCategoryId: parseInt(subId), name })
+        body: JSON.stringify({ subId: String(subId), name })
       });
       if (!res.ok) throw new Error('Server error');
       const saved = await safeParse(res);
       dispatch({ type: 'ADD_SUB_SUB_CATEGORY', payload: saved });
       showToast('Sub-Sub Group Created', `Sub-Sub group "${name}" created.`);
+      return { success: true, category: saved };
     } catch (err) {
       showToast('Creation Failed', 'Could not create category on server.', 'error');
+      return { success: false };
+    }
+  };
+
+  const updateSubSubCategory = async (id, data) => {
+    try {
+      const res = await fetch(`/api/categories/subsub/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      });
+      if (!res.ok) throw new Error('Server error');
+      dispatch({ type: 'UPDATE_SUB_SUB_CATEGORY', payload: { id, ...data } });
+      showToast('Sub-Sub Group Updated', `Sub-Sub group updated.`);
+      return { success: true };
+    } catch (err) {
+      showToast('Update Failed', 'Could not update category on server.', 'error');
+      return { success: false };
     }
   };
 
@@ -953,8 +1244,27 @@ export function ERPProvider({ children }) {
       const saved = await safeParse(res);
       dispatch({ type: 'ADD_UOM', payload: saved });
       showToast('UOM Created', `Unit "${code}" created.`);
+      return { success: true, uom: saved };
     } catch (err) {
       showToast('Creation Failed', 'Could not create UOM on server.', 'error');
+      return { success: false };
+    }
+  };
+
+  const updateUOM = async (id, data) => {
+    try {
+      const res = await fetch(`/api/uoms/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      });
+      if (!res.ok) throw new Error('Server error');
+      dispatch({ type: 'UPDATE_UOM', payload: { id, ...data } });
+      showToast('UOM Updated', `UOM updated successfully.`);
+      return { success: true };
+    } catch (err) {
+      showToast('Update Failed', 'Could not update UOM on server.', 'error');
+      return { success: false };
     }
   };
 
@@ -983,6 +1293,24 @@ export function ERPProvider({ children }) {
       return { success: true, country: saved };
     } catch (err) {
       showToast('Creation Failed', 'Could not create country on server.', 'error');
+      return { success: false };
+    }
+  };
+
+  const updateCountry = async (id, countryData) => {
+    try {
+      const res = await fetch(`/api/countries/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(countryData)
+      });
+      if (!res.ok) throw new Error('Server error');
+      const saved = await safeParse(res);
+      dispatch({ type: 'UPDATE_COUNTRY', payload: { id, ...countryData } });
+      showToast('Country Updated', `Country "${countryData.name || 'details'}" updated.`);
+      return { success: true };
+    } catch (err) {
+      showToast('Update Failed', 'Could not update country on server.', 'error');
       return { success: false };
     }
   };
@@ -1016,6 +1344,23 @@ export function ERPProvider({ children }) {
     }
   };
 
+  const updateState = async (id, stateData) => {
+    try {
+      const res = await fetch(`/api/states/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(stateData)
+      });
+      if (!res.ok) throw new Error('Server error');
+      dispatch({ type: 'UPDATE_STATE', payload: { id, ...stateData } });
+      showToast('State Updated', `State "${stateData.name || 'details'}" updated.`);
+      return { success: true };
+    } catch (err) {
+      showToast('Update Failed', 'Could not update state on server.', 'error');
+      return { success: false };
+    }
+  };
+
   const deleteState = async (id) => {
     try {
       const res = await fetch(`/api/states/${id}`, { method: 'DELETE' });
@@ -1027,6 +1372,11 @@ export function ERPProvider({ children }) {
     }
   };
 
+  const clearAllData = () => {
+    dispatch({ type: 'CLEAR_ALL_DATA' });
+    showToast('Data Cleared', 'All mock records cleared.');
+  };
+
   const value = {
     state,
     currentUser,
@@ -1036,29 +1386,44 @@ export function ERPProvider({ children }) {
     toasts,
     showToast,
     removeToast,
+    navResetCounter,
+    triggerNavReset,
     addParty,
+    updateParty,
+    deleteParty,
     addProduct,
+    updateProduct,
+    deleteProduct,
     createPurchaseOrder,
     receiveGoods,
     createSalesInvoice,
     approveInvoice,
     rejectInvoice,
     addItemType,
+    updateItemType,
     deleteItemType,
     addBrand,
+    updateBrand,
     deleteBrand,
     addMajorCategory,
+    updateMajorCategory,
     deleteMajorCategory,
     addSubCategory,
+    updateSubCategory,
     deleteSubCategory,
     addSubSubCategory,
+    updateSubSubCategory,
     deleteSubSubCategory,
     addUOM,
+    updateUOM,
     deleteUOM,
     addCountry,
+    updateCountry,
     deleteCountry,
     addState,
+    updateState,
     deleteState,
+    clearAllData,
     isCmdPaletteOpen,
     setIsCmdPaletteOpen,
     sidebarCollapsed,

@@ -55,9 +55,17 @@ public class StatesController : ControllerBase
     }
 
     [HttpPut("{id}")]
-    public async Task<IActionResult> Update(int id, [FromBody] State updated)
+    public async Task<IActionResult> Update(string id, [FromBody] State updated)
     {
-        var existing = await _db.States.FindAsync(id);
+        State? existing = null;
+        if (int.TryParse(id, out var intId))
+        {
+            existing = await _db.States.FindAsync(intId);
+        }
+        if (existing == null)
+        {
+            existing = await _db.States.FirstOrDefaultAsync(s => s.StateId == id || s.Code.ToLower() == id.ToLower() || s.Name.ToLower() == id.ToLower());
+        }
         if (existing == null) return NotFound();
 
         existing.Name = updated.Name;
@@ -77,7 +85,7 @@ public class StatesController : ControllerBase
         });
 
         await _db.SaveChangesAsync();
-        return NoContent();
+        return Ok(existing);
     }
 
     [HttpDelete("{id}")]

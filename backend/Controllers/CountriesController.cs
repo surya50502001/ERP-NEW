@@ -51,9 +51,17 @@ public class CountriesController : ControllerBase
     }
 
     [HttpPut("{id}")]
-    public async Task<IActionResult> Update(int id, [FromBody] Country updated)
+    public async Task<IActionResult> Update(string id, [FromBody] Country updated)
     {
-        var existing = await _db.Countries.FindAsync(id);
+        Country? existing = null;
+        if (int.TryParse(id, out var intId))
+        {
+            existing = await _db.Countries.FindAsync(intId);
+        }
+        if (existing == null)
+        {
+            existing = await _db.Countries.FirstOrDefaultAsync(c => c.CountryId == id || c.Code.ToLower() == id.ToLower() || c.Name.ToLower() == id.ToLower());
+        }
         if (existing == null) return NotFound();
 
         existing.Name = updated.Name;
@@ -73,7 +81,7 @@ public class CountriesController : ControllerBase
         });
 
         await _db.SaveChangesAsync();
-        return NoContent();
+        return Ok(existing);
     }
 
     [HttpDelete("{id}")]

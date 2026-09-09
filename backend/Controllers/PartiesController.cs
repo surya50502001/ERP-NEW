@@ -51,33 +51,41 @@ public class PartiesController : ControllerBase
     }
 
     [HttpPut("{id}")]
-    public async Task<IActionResult> Update(int id, [FromBody] Party updated)
+    public async Task<IActionResult> Update(string id, [FromBody] Party updated)
     {
-        var existing = await _db.Parties.FindAsync(id);
+        Party? existing = null;
+        if (int.TryParse(id, out int numId))
+        {
+            existing = await _db.Parties.FindAsync(numId);
+        }
+        if (existing == null)
+        {
+            existing = await _db.Parties.FirstOrDefaultAsync(p => p.PartyId == id || p.Name == id);
+        }
         if (existing == null) return NotFound();
 
-        existing.PartyId = updated.PartyId;
-        existing.Name = updated.Name;
-        existing.PartyType = updated.PartyType;
-        existing.Status = updated.Status;
-        existing.ContactNumber = updated.ContactNumber;
-        existing.Email = updated.Email;
-        existing.Addr1 = updated.Addr1;
-        existing.Addr2 = updated.Addr2;
-        existing.Addr3 = updated.Addr3;
-        existing.Addr4 = updated.Addr4;
-        existing.City = updated.City;
-        existing.State = updated.State;
-        existing.Country = updated.Country;
-        existing.Pincode = updated.Pincode;
-        existing.Gstin = updated.Gstin;
-        existing.Pan = updated.Pan;
+        existing.PartyId = updated.PartyId ?? existing.PartyId;
+        existing.Name = updated.Name ?? existing.Name;
+        existing.PartyType = updated.PartyType ?? existing.PartyType;
+        existing.Status = updated.Status ?? existing.Status;
+        existing.ContactNumber = updated.ContactNumber ?? existing.ContactNumber;
+        existing.Email = updated.Email ?? existing.Email;
+        existing.Addr1 = updated.Addr1 ?? existing.Addr1;
+        existing.Addr2 = updated.Addr2 ?? existing.Addr2;
+        existing.Addr3 = updated.Addr3 ?? existing.Addr3;
+        existing.Addr4 = updated.Addr4 ?? existing.Addr4;
+        existing.City = updated.City ?? existing.City;
+        existing.State = updated.State ?? existing.State;
+        existing.Country = updated.Country ?? existing.Country;
+        existing.Pincode = updated.Pincode ?? existing.Pincode;
+        existing.Gstin = updated.Gstin ?? existing.Gstin;
+        existing.Pan = updated.Pan ?? existing.Pan;
 
         _db.AuditLogs.Add(new SystemAuditLog
         {
             Entity = "Party",
             Action = "UPDATE",
-            RecordId = existing.PartyId ?? id.ToString(),
+            RecordId = existing.PartyId ?? existing.Id.ToString(),
             Details = $"Updated party master '{existing.Name}'",
             UserId = "System User",
             Timestamp = DateTime.UtcNow
@@ -88,16 +96,24 @@ public class PartiesController : ControllerBase
     }
 
     [HttpDelete("{id}")]
-    public async Task<IActionResult> Delete(int id)
+    public async Task<IActionResult> Delete(string id)
     {
-        var party = await _db.Parties.FindAsync(id);
+        Party? party = null;
+        if (int.TryParse(id, out int numId))
+        {
+            party = await _db.Parties.FindAsync(numId);
+        }
+        if (party == null)
+        {
+            party = await _db.Parties.FirstOrDefaultAsync(p => p.PartyId == id || p.Name == id);
+        }
         if (party == null) return NotFound();
 
         _db.AuditLogs.Add(new SystemAuditLog
         {
             Entity = "Party",
             Action = "DELETE",
-            RecordId = party.PartyId ?? id.ToString(),
+            RecordId = party.PartyId ?? party.Id.ToString(),
             Details = $"Deleted party master '{party.Name}'",
             UserId = "System User",
             Timestamp = DateTime.UtcNow
