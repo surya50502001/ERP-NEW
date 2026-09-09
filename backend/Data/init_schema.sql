@@ -351,3 +351,239 @@ BEGIN
     );
 END
 GO
+
+-- 15. Parties Table
+IF OBJECT_ID('Parties', 'U') IS NULL
+BEGIN
+    CREATE TABLE Parties (
+        Id INT IDENTITY(1,1) PRIMARY KEY,
+        PartyId NVARCHAR(50) NOT NULL DEFAULT '',
+        Name NVARCHAR(200) NOT NULL DEFAULT '',
+        Status NVARCHAR(50) NOT NULL DEFAULT 'Active',
+        ContactNumber NVARCHAR(50) NULL,
+        Email NVARCHAR(100) NULL,
+        Address NVARCHAR(500) NULL
+    );
+END
+GO
+
+-- 16. Products Table
+IF OBJECT_ID('Products', 'U') IS NULL
+BEGIN
+    CREATE TABLE Products (
+        Id INT IDENTITY(1,1) PRIMARY KEY,
+        ProductId NVARCHAR(50) NOT NULL DEFAULT '',
+        Name NVARCHAR(200) NOT NULL DEFAULT '',
+        ItemType NVARCHAR(100) NOT NULL DEFAULT 'Raw Material',
+        Brand NVARCHAR(100) NOT NULL DEFAULT 'Generic',
+        Uom NVARCHAR(50) NOT NULL DEFAULT 'KG',
+        MajorGroup NVARCHAR(100) NOT NULL DEFAULT '',
+        SubGroup NVARCHAR(100) NOT NULL DEFAULT '',
+        SubSubGroup NVARCHAR(100) NOT NULL DEFAULT '',
+        AvailableStock DECIMAL(18,2) NOT NULL DEFAULT 0,
+        MinReorderLevel DECIMAL(18,2) NOT NULL DEFAULT 0,
+        AvgRate DECIMAL(18,2) NOT NULL DEFAULT 0,
+        PurchaseRate DECIMAL(18,2) NOT NULL DEFAULT 0,
+        SellingPrice DECIMAL(18,2) NOT NULL DEFAULT 0,
+        StockValue DECIMAL(18,2) NOT NULL DEFAULT 0,
+        HsnCode NVARCHAR(50) NOT NULL DEFAULT '',
+        GstRate DECIMAL(18,2) NOT NULL DEFAULT 0,
+        Status NVARCHAR(50) NOT NULL DEFAULT 'Active',
+        Description NVARCHAR(1000) NOT NULL DEFAULT ''
+    );
+END
+GO
+
+-- 17. ItemTypes Table
+IF OBJECT_ID('ItemTypes', 'U') IS NULL
+BEGIN
+    CREATE TABLE ItemTypes (
+        Id INT IDENTITY(1,1) PRIMARY KEY,
+        ItemTypeId NVARCHAR(50) NOT NULL DEFAULT '',
+        Code NVARCHAR(50) NOT NULL DEFAULT '',
+        Name NVARCHAR(200) NOT NULL DEFAULT ''
+    );
+END
+GO
+
+-- 18. Brands Table
+IF OBJECT_ID('Brands', 'U') IS NULL
+BEGIN
+    CREATE TABLE Brands (
+        Id INT IDENTITY(1,1) PRIMARY KEY,
+        BrandId NVARCHAR(50) NOT NULL DEFAULT '',
+        Name NVARCHAR(200) NOT NULL DEFAULT ''
+    );
+END
+GO
+
+-- 19. Uoms Table
+IF OBJECT_ID('Uoms', 'U') IS NULL
+BEGIN
+    CREATE TABLE Uoms (
+        Id INT IDENTITY(1,1) PRIMARY KEY,
+        UomId NVARCHAR(50) NOT NULL DEFAULT '',
+        Code NVARCHAR(50) NOT NULL DEFAULT '',
+        Name NVARCHAR(200) NOT NULL DEFAULT '',
+        DecimalPlaces INT NOT NULL DEFAULT 2
+    );
+END
+GO
+
+-- 20. Categories
+IF OBJECT_ID('MajorCategories', 'U') IS NULL
+BEGIN
+    CREATE TABLE MajorCategories (
+        Id INT IDENTITY(1,1) PRIMARY KEY,
+        MajorId NVARCHAR(50) NOT NULL DEFAULT '',
+        Name NVARCHAR(200) NOT NULL DEFAULT '',
+        Code NVARCHAR(50) NOT NULL DEFAULT ''
+    );
+END
+GO
+
+IF OBJECT_ID('SubCategories', 'U') IS NULL
+BEGIN
+    CREATE TABLE SubCategories (
+        Id INT IDENTITY(1,1) PRIMARY KEY,
+        SubId NVARCHAR(50) NOT NULL DEFAULT '',
+        MajorId NVARCHAR(50) NOT NULL DEFAULT '',
+        Name NVARCHAR(200) NOT NULL DEFAULT ''
+    );
+END
+GO
+
+IF OBJECT_ID('SubSubCategories', 'U') IS NULL
+BEGIN
+    CREATE TABLE SubSubCategories (
+        Id INT IDENTITY(1,1) PRIMARY KEY,
+        SubSubId NVARCHAR(50) NOT NULL DEFAULT '',
+        SubId NVARCHAR(50) NOT NULL DEFAULT '',
+        Name NVARCHAR(200) NOT NULL DEFAULT ''
+    );
+END
+GO
+
+-- 21. PurchaseOrders, Items & Activity
+IF OBJECT_ID('PurchaseOrders', 'U') IS NULL
+BEGIN
+    CREATE TABLE PurchaseOrders (
+        Id INT IDENTITY(1,1) PRIMARY KEY,
+        PoId NVARCHAR(50) NOT NULL DEFAULT '',
+        Date DATETIME2 NOT NULL DEFAULT GETUTCDATE(),
+        Status NVARCHAR(50) NOT NULL DEFAULT 'Pending',
+        GrnId NVARCHAR(50) NULL,
+        SupplierName NVARCHAR(200) NOT NULL DEFAULT ''
+    );
+END
+GO
+
+IF OBJECT_ID('PurchaseOrderItem', 'U') IS NULL
+BEGIN
+    CREATE TABLE PurchaseOrderItem (
+        Id INT IDENTITY(1,1) PRIMARY KEY,
+        PurchaseOrderId INT NOT NULL,
+        ProductId INT NOT NULL,
+        Qty DECIMAL(18,2) NOT NULL DEFAULT 0,
+        ReceivedQty DECIMAL(18,2) NOT NULL DEFAULT 0,
+        CONSTRAINT FK_PurchaseOrderItem_PurchaseOrders FOREIGN KEY (PurchaseOrderId) REFERENCES PurchaseOrders(Id) ON DELETE CASCADE
+    );
+END
+GO
+
+IF OBJECT_ID('PurchaseOrderActivity', 'U') IS NULL
+BEGIN
+    CREATE TABLE PurchaseOrderActivity (
+        Id INT IDENTITY(1,1) PRIMARY KEY,
+        PurchaseOrderId INT NOT NULL,
+        Date DATETIME2 NOT NULL DEFAULT GETUTCDATE(),
+        [User] NVARCHAR(100) NOT NULL DEFAULT 'Admin',
+        Title NVARCHAR(200) NOT NULL DEFAULT '',
+        Detail NVARCHAR(1000) NOT NULL DEFAULT '',
+        CONSTRAINT FK_PurchaseOrderActivity_PurchaseOrders FOREIGN KEY (PurchaseOrderId) REFERENCES PurchaseOrders(Id) ON DELETE CASCADE
+    );
+END
+GO
+
+-- 22. SalesInvoices, Items & Activity
+IF OBJECT_ID('SalesInvoices', 'U') IS NULL
+BEGIN
+    CREATE TABLE SalesInvoices (
+        Id INT IDENTITY(1,1) PRIMARY KEY,
+        InvoiceId NVARCHAR(50) NOT NULL DEFAULT '',
+        CustomerName NVARCHAR(200) NOT NULL DEFAULT '',
+        Date DATETIME2 NOT NULL DEFAULT GETUTCDATE(),
+        TotalAmount DECIMAL(18,2) NOT NULL DEFAULT 0,
+        Status NVARCHAR(50) NOT NULL DEFAULT 'Pending'
+    );
+END
+GO
+
+IF OBJECT_ID('SalesInvoiceItem', 'U') IS NULL
+BEGIN
+    CREATE TABLE SalesInvoiceItem (
+        Id INT IDENTITY(1,1) PRIMARY KEY,
+        SalesInvoiceId INT NOT NULL,
+        ProductId INT NOT NULL,
+        Qty DECIMAL(18,2) NOT NULL DEFAULT 0,
+        Rate DECIMAL(18,2) NOT NULL DEFAULT 0,
+        CONSTRAINT FK_SalesInvoiceItem_SalesInvoices FOREIGN KEY (SalesInvoiceId) REFERENCES SalesInvoices(Id) ON DELETE CASCADE
+    );
+END
+GO
+
+IF OBJECT_ID('SalesInvoiceActivity', 'U') IS NULL
+BEGIN
+    CREATE TABLE SalesInvoiceActivity (
+        Id INT IDENTITY(1,1) PRIMARY KEY,
+        SalesInvoiceId INT NOT NULL,
+        Date DATETIME2 NOT NULL DEFAULT GETUTCDATE(),
+        [User] NVARCHAR(100) NOT NULL DEFAULT 'Admin',
+        Title NVARCHAR(200) NOT NULL DEFAULT '',
+        Detail NVARCHAR(1000) NOT NULL DEFAULT '',
+        CONSTRAINT FK_SalesInvoiceActivity_SalesInvoices FOREIGN KEY (SalesInvoiceId) REFERENCES SalesInvoices(Id) ON DELETE CASCADE
+    );
+END
+GO
+
+-- 23. Batches, Notifications & RecentActivity
+IF OBJECT_ID('Batches', 'U') IS NULL
+BEGIN
+    CREATE TABLE Batches (
+        Id INT IDENTITY(1,1) PRIMARY KEY,
+        BatchNo NVARCHAR(100) NOT NULL DEFAULT '',
+        ReceivedDate DATETIME2 NOT NULL DEFAULT GETUTCDATE(),
+        InitialQty DECIMAL(18,2) NOT NULL DEFAULT 0,
+        AvailableQty DECIMAL(18,2) NOT NULL DEFAULT 0,
+        Rate DECIMAL(18,2) NOT NULL DEFAULT 0,
+        GrnId NVARCHAR(50) NOT NULL DEFAULT '',
+        ProductId INT NOT NULL DEFAULT 0
+    );
+END
+GO
+
+IF OBJECT_ID('Notifications', 'U') IS NULL
+BEGIN
+    CREATE TABLE Notifications (
+        Id INT IDENTITY(1,1) PRIMARY KEY,
+        Title NVARCHAR(200) NOT NULL DEFAULT '',
+        Message NVARCHAR(1000) NOT NULL DEFAULT '',
+        Unread BIT NOT NULL DEFAULT 1,
+        Time DATETIME2 NOT NULL DEFAULT GETUTCDATE()
+    );
+END
+GO
+
+IF OBJECT_ID('RecentActivities', 'U') IS NULL
+BEGIN
+    CREATE TABLE RecentActivities (
+        Id INT IDENTITY(1,1) PRIMARY KEY,
+        Code NVARCHAR(50) NOT NULL DEFAULT '',
+        Party NVARCHAR(200) NOT NULL DEFAULT '',
+        Detail NVARCHAR(1000) NOT NULL DEFAULT '',
+        Time DATETIME2 NOT NULL DEFAULT GETUTCDATE(),
+        Type NVARCHAR(50) NOT NULL DEFAULT '',
+        Status NVARCHAR(50) NOT NULL DEFAULT 'Success'
+    );
+END
+GO
