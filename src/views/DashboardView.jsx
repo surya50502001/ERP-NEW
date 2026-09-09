@@ -5,7 +5,7 @@ import StatusBadge from '../components/StatusBadge';
 import { useERP } from '../context/ERPContext';
 
 export default function DashboardView({ onNavigate }) {
-  const { state } = useERP();
+  const { state, currentUser } = useERP();
   if (!state) return null;
 
   const totalPurchases = (state.purchaseOrders || []).reduce((acc, po) => acc + (po.totalAmount || 0), 0);
@@ -85,8 +85,8 @@ export default function DashboardView({ onNavigate }) {
       {/* Header Banner */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-slate-200/60">
         <div>
-          <h1 className="text-xl font-bold text-slate-900 tracking-tight">Good morning, {erp?.currentUser?.fullName || 'User'}</h1>
-          <p className="text-xs text-slate-500 mt-1 font-medium">Operational overview for {erp?.currentUser?.companyName || 'your company'} • {todayStr}</p>
+          <h1 className="text-xl font-bold text-slate-900 tracking-tight">Good morning, {currentUser?.fullName || 'User'}</h1>
+          <p className="text-xs text-slate-500 mt-1 font-medium">Operational overview for {currentUser?.companyName || 'your company'} • {todayStr}</p>
         </div>
         <div className="flex items-center gap-2">
           <Button size="sm" variant="secondary" onClick={() => onNavigate('purchases')}>
