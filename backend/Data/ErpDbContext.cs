@@ -37,6 +37,8 @@ public class ErpDbContext : DbContext
     public DbSet<Batch> Batches => Set<Batch>();
     public DbSet<Notification> Notifications => Set<Notification>();
     public DbSet<RecentActivity> RecentActivities => Set<RecentActivity>();
+    public DbSet<Country> Countries => Set<Country>();
+    public DbSet<State> States => Set<State>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

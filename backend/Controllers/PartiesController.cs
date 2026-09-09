@@ -58,10 +58,20 @@ public class PartiesController : ControllerBase
 
         existing.PartyId = updated.PartyId;
         existing.Name = updated.Name;
+        existing.PartyType = updated.PartyType;
         existing.Status = updated.Status;
         existing.ContactNumber = updated.ContactNumber;
         existing.Email = updated.Email;
-        existing.Address = updated.Address;
+        existing.Addr1 = updated.Addr1;
+        existing.Addr2 = updated.Addr2;
+        existing.Addr3 = updated.Addr3;
+        existing.Addr4 = updated.Addr4;
+        existing.City = updated.City;
+        existing.State = updated.State;
+        existing.Country = updated.Country;
+        existing.Pincode = updated.Pincode;
+        existing.Gstin = updated.Gstin;
+        existing.Pan = updated.Pan;
 
         _db.AuditLogs.Add(new SystemAuditLog
         {

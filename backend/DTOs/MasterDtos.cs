@@ -85,8 +85,12 @@ public class PartyMasterDto
     public string SlName { get; set; } = string.Empty;
     public string PartyType { get; set; } = "Customer"; // Customer, Supplier, Both
     public string Address1 { get; set; } = string.Empty;
+    public string Address2 { get; set; } = string.Empty;
+    public string Address3 { get; set; } = string.Empty;
+    public string Address4 { get; set; } = string.Empty;
     public string City { get; set; } = string.Empty;
     public string State { get; set; } = string.Empty;
+    public string Country { get; set; } = "India";
     public string Pincode { get; set; } = string.Empty;
     public string? Gstin { get; set; }
     public string? PanNo { get; set; }
@@ -103,14 +107,58 @@ public class CreatePartyMasterDto
     public string SlName { get; set; } = string.Empty;
     public string PartyType { get; set; } = "Customer";
     public string Address1 { get; set; } = string.Empty;
+    public string Address2 { get; set; } = string.Empty;
+    public string Address3 { get; set; } = string.Empty;
+    public string Address4 { get; set; } = string.Empty;
     public string City { get; set; } = string.Empty;
     public string State { get; set; } = string.Empty;
+    public string Country { get; set; } = "India";
     public string Pincode { get; set; } = string.Empty;
     public string? Gstin { get; set; }
     public string? PanNo { get; set; }
     public string? Email { get; set; }
     public string? Phone { get; set; }
     public decimal CreditLimit { get; set; } = 0;
+}
+
+// Country Master DTOs
+public class CountryDto
+{
+    public int Id { get; set; }
+    public string CountryId { get; set; } = string.Empty;
+    public string Code { get; set; } = string.Empty;
+    public string Name { get; set; } = string.Empty;
+    public string CurrencyCode { get; set; } = "INR";
+    public string PhoneCode { get; set; } = "+91";
+    public string Status { get; set; } = "Active";
+}
+
+public class CreateCountryDto
+{
+    public string Code { get; set; } = string.Empty;
+    public string Name { get; set; } = string.Empty;
+    public string CurrencyCode { get; set; } = "INR";
+    public string PhoneCode { get; set; } = "+91";
+}
+
+// State Master DTOs
+public class StateDto
+{
+    public int Id { get; set; }
+    public string StateId { get; set; } = string.Empty;
+    public string Code { get; set; } = string.Empty;
+    public string Name { get; set; } = string.Empty;
+    public string CountryCode { get; set; } = "IND";
+    public string GstStateCode { get; set; } = string.Empty;
+    public string Status { get; set; } = "Active";
+}
+
+public class CreateStateDto
+{
+    public string Code { get; set; } = string.Empty;
+    public string Name { get; set; } = string.Empty;
+    public string CountryCode { get; set; } = "IND";
+    public string GstStateCode { get; set; } = string.Empty;
 }
 
 // Bank Master DTOs

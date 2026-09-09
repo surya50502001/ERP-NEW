@@ -96,10 +96,14 @@ BEGIN
         slcode VARCHAR(10) NOT NULL,
         slname VARCHAR(150) NOT NULL,
         partytype VARCHAR(20) NOT NULL, -- Customer, Supplier, Both
-        address1 VARCHAR(200) NOT NULL,
-        city VARCHAR(50) NOT NULL,
-        state VARCHAR(50) NOT NULL,
-        pincode VARCHAR(10) NOT NULL,
+        address1 VARCHAR(200) NOT NULL DEFAULT '',
+        address2 VARCHAR(200) NOT NULL DEFAULT '',
+        address3 VARCHAR(200) NOT NULL DEFAULT '',
+        address4 VARCHAR(200) NOT NULL DEFAULT '',
+        city VARCHAR(50) NOT NULL DEFAULT '',
+        state VARCHAR(50) NOT NULL DEFAULT '',
+        country VARCHAR(50) NOT NULL DEFAULT 'India',
+        pincode VARCHAR(10) NOT NULL DEFAULT '',
         gstin VARCHAR(20) NULL,
         panno VARCHAR(20) NULL,
         email VARCHAR(100) NULL,
@@ -113,6 +117,13 @@ BEGIN
         CONSTRAINT PK_sale_partymst PRIMARY KEY (compcode, slcode)
     );
 END
+GO
+
+-- Ensure new columns exist in sale_partymst if already created
+IF COL_LENGTH('sale_partymst', 'address2') IS NULL ALTER TABLE sale_partymst ADD address2 VARCHAR(200) NOT NULL DEFAULT '';
+IF COL_LENGTH('sale_partymst', 'address3') IS NULL ALTER TABLE sale_partymst ADD address3 VARCHAR(200) NOT NULL DEFAULT '';
+IF COL_LENGTH('sale_partymst', 'address4') IS NULL ALTER TABLE sale_partymst ADD address4 VARCHAR(200) NOT NULL DEFAULT '';
+IF COL_LENGTH('sale_partymst', 'country') IS NULL ALTER TABLE sale_partymst ADD country VARCHAR(50) NOT NULL DEFAULT 'India';
 GO
 
 -- 5. Product Master
@@ -359,11 +370,107 @@ BEGIN
         Id INT IDENTITY(1,1) PRIMARY KEY,
         PartyId NVARCHAR(50) NOT NULL DEFAULT '',
         Name NVARCHAR(200) NOT NULL DEFAULT '',
+        PartyType NVARCHAR(50) NOT NULL DEFAULT 'Customer',
         Status NVARCHAR(50) NOT NULL DEFAULT 'Active',
         ContactNumber NVARCHAR(50) NULL,
         Email NVARCHAR(100) NULL,
-        Address NVARCHAR(500) NULL
+        Addr1 NVARCHAR(200) NOT NULL DEFAULT '',
+        Addr2 NVARCHAR(200) NOT NULL DEFAULT '',
+        Addr3 NVARCHAR(200) NOT NULL DEFAULT '',
+        Addr4 NVARCHAR(200) NOT NULL DEFAULT '',
+        City NVARCHAR(100) NOT NULL DEFAULT '',
+        State NVARCHAR(100) NOT NULL DEFAULT '',
+        Country NVARCHAR(100) NOT NULL DEFAULT 'India',
+        Pincode NVARCHAR(20) NOT NULL DEFAULT '',
+        Gstin NVARCHAR(50) NULL,
+        Pan NVARCHAR(50) NULL
     );
+END
+GO
+
+-- Ensure new columns exist in Parties if already created
+IF COL_LENGTH('Parties', 'PartyType') IS NULL ALTER TABLE Parties ADD PartyType NVARCHAR(50) NOT NULL DEFAULT 'Customer';
+IF COL_LENGTH('Parties', 'Addr1') IS NULL ALTER TABLE Parties ADD Addr1 NVARCHAR(200) NOT NULL DEFAULT '';
+IF COL_LENGTH('Parties', 'Addr2') IS NULL ALTER TABLE Parties ADD Addr2 NVARCHAR(200) NOT NULL DEFAULT '';
+IF COL_LENGTH('Parties', 'Addr3') IS NULL ALTER TABLE Parties ADD Addr3 NVARCHAR(200) NOT NULL DEFAULT '';
+IF COL_LENGTH('Parties', 'Addr4') IS NULL ALTER TABLE Parties ADD Addr4 NVARCHAR(200) NOT NULL DEFAULT '';
+IF COL_LENGTH('Parties', 'City') IS NULL ALTER TABLE Parties ADD City NVARCHAR(100) NOT NULL DEFAULT '';
+IF COL_LENGTH('Parties', 'State') IS NULL ALTER TABLE Parties ADD State NVARCHAR(100) NOT NULL DEFAULT '';
+IF COL_LENGTH('Parties', 'Country') IS NULL ALTER TABLE Parties ADD Country NVARCHAR(100) NOT NULL DEFAULT 'India';
+IF COL_LENGTH('Parties', 'Pincode') IS NULL ALTER TABLE Parties ADD Pincode NVARCHAR(20) NOT NULL DEFAULT '';
+IF COL_LENGTH('Parties', 'Gstin') IS NULL ALTER TABLE Parties ADD Gstin NVARCHAR(50) NULL;
+IF COL_LENGTH('Parties', 'Pan') IS NULL ALTER TABLE Parties ADD Pan NVARCHAR(50) NULL;
+GO
+
+-- 15a. Countries Table
+IF OBJECT_ID('Countries', 'U') IS NULL
+BEGIN
+    CREATE TABLE Countries (
+        Id INT IDENTITY(1,1) PRIMARY KEY,
+        CountryId NVARCHAR(50) NOT NULL DEFAULT '',
+        Code NVARCHAR(10) NOT NULL DEFAULT '',
+        Name NVARCHAR(100) NOT NULL DEFAULT '',
+        CurrencyCode NVARCHAR(10) NOT NULL DEFAULT 'INR',
+        PhoneCode NVARCHAR(10) NOT NULL DEFAULT '+91',
+        Status NVARCHAR(50) NOT NULL DEFAULT 'Active'
+    );
+END
+GO
+
+-- Seed standard countries if empty
+IF NOT EXISTS (SELECT 1 FROM Countries)
+BEGIN
+    INSERT INTO Countries (CountryId, Code, Name, CurrencyCode, PhoneCode, Status) VALUES
+    ('CTRY0001', 'IND', 'India', 'INR', '+91', 'Active'),
+    ('CTRY0002', 'USA', 'United States', 'USD', '+1', 'Active'),
+    ('CTRY0003', 'UAE', 'United Arab Emirates', 'AED', '+971', 'Active'),
+    ('CTRY0004', 'GBR', 'United Kingdom', 'GBP', '+44', 'Active'),
+    ('CTRY0005', 'SGP', 'Singapore', 'SGD', '+65', 'Active'),
+    ('CTRY0006', 'DEU', 'Germany', 'EUR', '+49', 'Active'),
+    ('CTRY0007', 'AUS', 'Australia', 'AUD', '+61', 'Active'),
+    ('CTRY0008', 'CAN', 'Canada', 'CAD', '+1', 'Active');
+END
+GO
+
+-- 15b. States Table
+IF OBJECT_ID('States', 'U') IS NULL
+BEGIN
+    CREATE TABLE States (
+        Id INT IDENTITY(1,1) PRIMARY KEY,
+        StateId NVARCHAR(50) NOT NULL DEFAULT '',
+        Code NVARCHAR(10) NOT NULL DEFAULT '',
+        Name NVARCHAR(100) NOT NULL DEFAULT '',
+        CountryCode NVARCHAR(10) NOT NULL DEFAULT 'IND',
+        GstStateCode NVARCHAR(10) NOT NULL DEFAULT '',
+        Status NVARCHAR(50) NOT NULL DEFAULT 'Active'
+    );
+END
+GO
+
+-- Seed Indian States with standard GST state codes if empty
+IF NOT EXISTS (SELECT 1 FROM States)
+BEGIN
+    INSERT INTO States (StateId, Code, Name, CountryCode, GstStateCode, Status) VALUES
+    ('ST0001', 'TN', 'Tamil Nadu', 'IND', '33', 'Active'),
+    ('ST0002', 'KA', 'Karnataka', 'IND', '29', 'Active'),
+    ('ST0003', 'MH', 'Maharashtra', 'IND', '27', 'Active'),
+    ('ST0004', 'DL', 'Delhi', 'IND', '07', 'Active'),
+    ('ST0005', 'KL', 'Kerala', 'IND', '32', 'Active'),
+    ('ST0006', 'AP', 'Andhra Pradesh', 'IND', '37', 'Active'),
+    ('ST0007', 'TG', 'Telangana', 'IND', '36', 'Active'),
+    ('ST0008', 'GJ', 'Gujarat', 'IND', '24', 'Active'),
+    ('ST0009', 'WB', 'West Bengal', 'IND', '19', 'Active'),
+    ('ST0010', 'UP', 'Uttar Pradesh', 'IND', '09', 'Active'),
+    ('ST0011', 'RJ', 'Rajasthan', 'IND', '08', 'Active'),
+    ('ST0012', 'MP', 'Madhya Pradesh', 'IND', '23', 'Active'),
+    ('ST0013', 'HR', 'Haryana', 'IND', '06', 'Active'),
+    ('ST0014', 'PB', 'Punjab', 'IND', '03', 'Active'),
+    ('ST0015', 'OR', 'Odisha', 'IND', '21', 'Active'),
+    ('ST0016', 'CA', 'California', 'USA', '', 'Active'),
+    ('ST0017', 'TX', 'Texas', 'USA', '', 'Active'),
+    ('ST0018', 'NY', 'New York', 'USA', '', 'Active'),
+    ('ST0019', 'DXB', 'Dubai', 'UAE', '', 'Active'),
+    ('ST0020', 'AUH', 'Abu Dhabi', 'UAE', '', 'Active');
 END
 GO
 

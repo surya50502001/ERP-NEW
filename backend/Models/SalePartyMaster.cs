@@ -26,6 +26,18 @@ public class SalePartyMaster
     [MaxLength(200)]
     public string Address1 { get; set; } = string.Empty;
 
+    [Column("address2")]
+    [MaxLength(200)]
+    public string Address2 { get; set; } = string.Empty;
+
+    [Column("address3")]
+    [MaxLength(200)]
+    public string Address3 { get; set; } = string.Empty;
+
+    [Column("address4")]
+    [MaxLength(200)]
+    public string Address4 { get; set; } = string.Empty;
+
     [Column("city")]
     [MaxLength(50)]
     public string City { get; set; } = string.Empty;
@@ -33,6 +45,10 @@ public class SalePartyMaster
     [Column("state")]
     [MaxLength(50)]
     public string State { get; set; } = string.Empty;
+
+    [Column("country")]
+    [MaxLength(50)]
+    public string Country { get; set; } = "India";
 
     [Column("pincode")]
     [MaxLength(10)]

@@ -2,6 +2,8 @@ import React, { createContext, useContext, useState, useEffect, useReducer } fro
 
 const INITIAL_ERP_DATA = {
   parties: [],
+  countries: [],
+  states: [],
   itemTypes: [],
   brands: [],
   categories: { major: [], sub: [], subSub: [] },
@@ -17,6 +19,8 @@ const INITIAL_ERP_DATA = {
 
 const EMPTY_ERP_DATA = {
   parties: [],
+  countries: [],
+  states: [],
   itemTypes: [],
   brands: [],
   categories: { major: [], sub: [], subSub: [] },
@@ -466,6 +470,46 @@ function erpReducer(state, action) {
       newState = { ...state, uoms: [...(state.uoms || []), newUom] };
       break;
     }
+    case 'ADD_COUNTRY': {
+      const newCountry = {
+        id: action.payload.id || Date.now(),
+        countryId: action.payload.countryId || `CTRY${((state.countries?.length || 0) + 1).toString().padStart(4, '0')}`,
+        code: (action.payload.code || '').toUpperCase(),
+        name: action.payload.name,
+        currencyCode: (action.payload.currencyCode || 'INR').toUpperCase(),
+        phoneCode: action.payload.phoneCode || '+91',
+        status: action.payload.status || 'Active'
+      };
+      newState = { ...state, countries: [...(state.countries || []), newCountry] };
+      break;
+    }
+    case 'DELETE_COUNTRY': {
+      newState = {
+        ...state,
+        countries: (state.countries || []).filter(c => c.id !== action.payload && c.countryId !== action.payload && c.code !== action.payload)
+      };
+      break;
+    }
+    case 'ADD_STATE': {
+      const newStateObj = {
+        id: action.payload.id || Date.now(),
+        stateId: action.payload.stateId || `ST${((state.states?.length || 0) + 1).toString().padStart(4, '0')}`,
+        code: (action.payload.code || '').toUpperCase(),
+        name: action.payload.name,
+        countryCode: (action.payload.countryCode || 'IND').toUpperCase(),
+        gstStateCode: action.payload.gstStateCode || '',
+        status: action.payload.status || 'Active'
+      };
+      newState = { ...state, states: [...(state.states || []), newStateObj] };
+      break;
+    }
+    case 'DELETE_STATE': {
+      newState = {
+        ...state,
+        states: (state.states || []).filter(s => s.id !== action.payload && s.stateId !== action.payload && s.code !== action.payload)
+      };
+      break;
+    }
     case 'DELETE_UOM': {
       newState = {
         ...state,
@@ -546,17 +590,32 @@ export function ERPProvider({ children }) {
           }
         };
 
-        const [parties, products, brands, uoms, itemTypes, pos, invs] = await Promise.all([
+        const [parties, products, brands, uoms, itemTypes, pos, invs, countries, states] = await Promise.all([
           fetch('/api/parties').then(safeJson),
           fetch('/api/products').then(safeJson),
           fetch('/api/brands').then(safeJson),
           fetch('/api/uoms').then(safeJson),
           fetch('/api/itemtypes').then(safeJson),
           fetch('/api/purchaseorders').then(safeJson),
-          fetch('/api/salesinvoices').then(safeJson)
+          fetch('/api/salesinvoices').then(safeJson),
+          fetch('/api/countries').then(safeJson),
+          fetch('/api/states').then(safeJson)
         ]);
 
-        dispatch({ type: 'SET_ALL_DATA', payload: { parties, products, brands, uoms, itemTypes, purchaseOrders: pos, salesInvoices: invs } });
+        dispatch({
+          type: 'SET_ALL_DATA',
+          payload: {
+            parties,
+            products,
+            brands,
+            uoms,
+            itemTypes,
+            purchaseOrders: pos,
+            salesInvoices: invs,
+            countries: countries && countries.length > 0 ? countries : [],
+            states: states && states.length > 0 ? states : []
+          }
+        });
       } catch (err) {
         console.error('Failed to fetch initial data:', err);
       }
@@ -910,6 +969,64 @@ export function ERPProvider({ children }) {
     }
   };
 
+  const addCountry = async (countryData) => {
+    try {
+      const res = await fetch('/api/countries', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(countryData)
+      });
+      if (!res.ok) throw new Error('Server error');
+      const saved = await safeParse(res);
+      dispatch({ type: 'ADD_COUNTRY', payload: saved });
+      showToast('Country Created', `Country "${saved.name || countryData.name}" created.`);
+      return { success: true, country: saved };
+    } catch (err) {
+      showToast('Creation Failed', 'Could not create country on server.', 'error');
+      return { success: false };
+    }
+  };
+
+  const deleteCountry = async (id) => {
+    try {
+      const res = await fetch(`/api/countries/${id}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error('Server error');
+      dispatch({ type: 'DELETE_COUNTRY', payload: id });
+      showToast('Country Removed', 'Country deleted.');
+    } catch (err) {
+      showToast('Deletion Failed', 'Could not delete country on server.', 'error');
+    }
+  };
+
+  const addState = async (stateData) => {
+    try {
+      const res = await fetch('/api/states', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(stateData)
+      });
+      if (!res.ok) throw new Error('Server error');
+      const saved = await safeParse(res);
+      dispatch({ type: 'ADD_STATE', payload: saved });
+      showToast('State Created', `State "${saved.name || stateData.name}" created.`);
+      return { success: true, state: saved };
+    } catch (err) {
+      showToast('Creation Failed', 'Could not create state on server.', 'error');
+      return { success: false };
+    }
+  };
+
+  const deleteState = async (id) => {
+    try {
+      const res = await fetch(`/api/states/${id}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error('Server error');
+      dispatch({ type: 'DELETE_STATE', payload: id });
+      showToast('State Removed', 'State deleted.');
+    } catch (err) {
+      showToast('Deletion Failed', 'Could not delete state on server.', 'error');
+    }
+  };
+
   const value = {
     state,
     currentUser,
@@ -938,6 +1055,10 @@ export function ERPProvider({ children }) {
     deleteSubSubCategory,
     addUOM,
     deleteUOM,
+    addCountry,
+    deleteCountry,
+    addState,
+    deleteState,
     isCmdPaletteOpen,
     setIsCmdPaletteOpen,
     sidebarCollapsed,
