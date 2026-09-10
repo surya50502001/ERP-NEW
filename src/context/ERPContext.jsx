@@ -13,6 +13,7 @@ const INITIAL_ERP_DATA = {
   batches: {},
   purchaseOrders: [],
   salesInvoices: [],
+  directGrns: [],
   recentActivities: [],
   notifications: []
 };
@@ -30,6 +31,7 @@ const EMPTY_ERP_DATA = {
   batches: {},
   purchaseOrders: [],
   salesInvoices: [],
+  directGrns: [],
   recentActivities: [],
   notifications: []
 };
@@ -256,6 +258,83 @@ function erpReducer(state, action) {
         purchaseOrders: updatedPOs,
         products: updatedProducts,
         batches: newBatches,
+        recentActivities: [newAct, ...(state.recentActivities || [])]
+      };
+      break;
+    }
+    case 'CREATE_DIRECT_GRN': {
+      const { inwardType, supplierId, supplierName, dcNo, date, notes, items } = action.payload;
+      const dgrnNumber = `DGRN-${1000 + (state.directGrns?.length || 0) + 1}`;
+      const todayStr = date || new Date().toISOString().split('T')[0];
+
+      const newBatches = { ...(state.batches || {}) };
+      const updatedProducts = (state.products || []).map(prod => {
+        const lineItem = (items || []).find(r => r.productId === prod.id);
+        if (lineItem && parseFloat(lineItem.qty || 0) > 0) {
+          const addedQty = parseFloat(lineItem.qty);
+          const rate = parseFloat(lineItem.rate || prod.avgRate || 0);
+          const batchNo = lineItem.batchNo || `DB${Math.floor(Math.random() * 900) + 100}`;
+
+          const prodBatches = newBatches[prod.id] ? [...newBatches[prod.id]] : [];
+          prodBatches.push({
+            batchNo,
+            receivedDate: todayStr,
+            initialQty: addedQty,
+            availableQty: addedQty,
+            rate: rate,
+            grnId: dgrnNumber,
+            warehouse: lineItem.warehouse || 'Main Warehouse',
+            inwardType: inwardType || 'Direct Inward'
+          });
+          newBatches[prod.id] = prodBatches;
+
+          const newTotalStock = prod.availableStock + addedQty;
+          const newStockVal = prod.stockValue + (addedQty * rate);
+          const newAvgRate = newTotalStock > 0 ? (newStockVal / newTotalStock) : prod.avgRate;
+
+          return {
+            ...prod,
+            availableStock: newTotalStock,
+            stockValue: newStockVal,
+            avgRate: Math.round(newAvgRate * 100) / 100,
+            status: newTotalStock > prod.minReorderLevel ? 'Active' : 'Low Stock'
+          };
+        }
+        return prod;
+      });
+
+      const totalValuation = (items || []).reduce((acc, it) => acc + (parseFloat(it.qty || 0) * parseFloat(it.rate || 0)), 0);
+
+      const newDirectGrn = {
+        id: dgrnNumber,
+        inwardType: inwardType || 'Direct Purchase',
+        supplierId: supplierId || null,
+        supplierName: supplierName || 'Direct / Internal Stock',
+        dcNo: dcNo || 'DC-DIRECT',
+        date: todayStr,
+        notes: notes || 'Direct stock inward without PO',
+        items: items || [],
+        totalItems: (items || []).length,
+        totalQty: (items || []).reduce((acc, it) => acc + parseFloat(it.qty || 0), 0),
+        totalValuation,
+        status: 'Completed'
+      };
+
+      const newAct = {
+        id: `ACT-${Date.now()}`,
+        code: dgrnNumber,
+        party: supplierName || 'Direct Stock Inward',
+        detail: `${inwardType || 'Direct Inward'} • ${(items || []).length} items added to inventory stock`,
+        time: 'Just now',
+        type: 'grn',
+        status: 'Success'
+      };
+
+      newState = {
+        ...state,
+        products: updatedProducts,
+        batches: newBatches,
+        directGrns: [newDirectGrn, ...(state.directGrns || [])],
         recentActivities: [newAct, ...(state.recentActivities || [])]
       };
       break;
@@ -953,6 +1032,32 @@ export function ERPProvider({ children }) {
     showToast('Goods Received', `Stock & FIFO batch ledger updated.`, 'success');
   };
 
+  const createDirectGRN = async (grnData) => {
+    try {
+      const payload = {
+        slCode: grnData.supplierId || 'DIRECT',
+        suppInvNo: grnData.dcNo || 'DIRECT-DC',
+        storeLoc: 'MAIN',
+        remarks: grnData.notes || grnData.inwardType || 'Direct Stock Inward',
+        items: (grnData.items || []).map(i => ({
+          itemCode: i.productId,
+          recQty: parseFloat(i.qty || 0),
+          recRate: parseFloat(i.rate || 0),
+          batchNo: i.batchNo || null
+        }))
+      };
+      fetch('/api/grn', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      }).catch(() => {});
+    } catch (e) {}
+
+    dispatch({ type: 'CREATE_DIRECT_GRN', payload: grnData });
+    showToast('Direct GRN Posted', `Direct stock inward completed & inventory updated.`, 'success');
+    return { success: true };
+  };
+
   const createSalesInvoice = async (invData) => {
     try {
       const res = await fetch('/api/salesinvoices', {
@@ -1396,6 +1501,7 @@ export function ERPProvider({ children }) {
     deleteProduct,
     createPurchaseOrder,
     receiveGoods,
+    createDirectGRN,
     createSalesInvoice,
     approveInvoice,
     rejectInvoice,
