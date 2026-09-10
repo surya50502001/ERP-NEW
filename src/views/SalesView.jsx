@@ -89,7 +89,7 @@ export default function SalesView({ onNavigate }) {
 
   const handleCreateInvoice = async () => {
     const customer = (state.parties || []).find(p => p.id === invCustomerId) ||
-      (state.parties && state.parties.find(p => p.type === 'Customer')) ||
+      (state.parties && state.parties.find(p => (p.partyType || p.type) === 'Customer')) ||
       { id: 'PTY-104', name: 'XYZ Textiles' };
 
     await createSalesInvoice({
@@ -176,7 +176,7 @@ export default function SalesView({ onNavigate }) {
             <Combobox
               label="Select Customer"
               placeholder="Search customer name..."
-              options={(state.parties || []).filter(p => p.type === 'Customer' || p.type === 'Both').map(p => ({ label: p.name, value: p.id, sublabel: p.location }))}
+              options={(state.parties || []).filter(p => (p.partyType || p.type) === 'Customer' || (p.partyType || p.type) === 'Both').map(p => ({ label: p.name, value: p.id, sublabel: p.location }))}
               value={invCustomerId}
               onChange={(val) => setInvCustomerId(val)}
               onCreateNew={() => setIsCreateCustomerOpen(true)}

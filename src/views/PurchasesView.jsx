@@ -127,9 +127,8 @@ export default function PurchasesView({ onNavigate }) {
     if (!newPartyName) return;
     addParty({
       name: newPartyName,
-      type: newPartyType,
-      phone: newPartyPhone || '+91 98420 00000',
-      location: `Coimbatore, ${newPartyState}`,
+      partyType: newPartyType,
+      contactNumber: newPartyPhone || '+91 98420 00000',
       country: 'India',
       state: newPartyState
     });
@@ -167,7 +166,7 @@ export default function PurchasesView({ onNavigate }) {
             <Combobox
               label="Select Supplier"
               placeholder="Search supplier..."
-              options={(state.parties || []).filter(p => p.type === 'Supplier' || p.type === 'Both').map(p => ({ label: p.name, value: p.id, sublabel: p.location }))}
+              options={(state.parties || []).filter(p => (p.partyType || p.type) === 'Supplier' || (p.partyType || p.type) === 'Both').map(p => ({ label: p.name, value: p.id, sublabel: p.location }))}
               value={poSupplierId}
               onChange={(val) => setPoSupplierId(val)}
               onCreateNew={() => setIsCreatePartyOpen(true)}

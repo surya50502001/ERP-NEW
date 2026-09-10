@@ -180,9 +180,8 @@ export default function InventoryView({ onNavigate }) {
     if (!newPartyName) return;
     addParty({
       name: newPartyName,
-      type: newPartyType,
-      phone: newPartyPhone || '+91 98400 00000',
-      location: `Coimbatore, ${newPartyState}`,
+      partyType: newPartyType,
+      contactNumber: newPartyPhone || '+91 98400 00000',
       country: 'India',
       state: newPartyState
     });
@@ -757,7 +756,7 @@ export default function InventoryView({ onNavigate }) {
             <Combobox
               label="Supplier / Source Party"
               placeholder="Select or search party..."
-              options={(state.parties || []).map(p => ({ label: p.name, value: p.id, sublabel: p.type }))}
+              options={(state.parties || []).map(p => ({ label: p.name, value: p.id, sublabel: p.partyType || p.type }))}
               value={directSupplierId}
               onChange={(val) => setDirectSupplierId(val)}
               onCreateNew={() => setIsQuickPartyOpen(true)}
