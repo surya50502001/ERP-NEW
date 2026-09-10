@@ -213,9 +213,21 @@ export default function PurchasesView({ onNavigate }) {
 
             {poItems.map((item, idx) => (
               <div key={idx} className="p-4 rounded-xl border border-slate-200 bg-slate-50/50 space-y-3">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-xs font-semibold text-slate-500">Item #{idx + 1}</span>
+                  {poItems.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => setPoItems(poItems.filter((_, i) => i !== idx))}
+                      className="text-xs text-red-500 hover:text-red-700 font-semibold flex items-center gap-1 px-2 py-1 rounded-lg hover:bg-red-50 transition-colors"
+                    >
+                      <Icon name="Trash2" className="w-3.5 h-3.5" /> Remove
+                    </button>
+                  )}
+                </div>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                   <Combobox
-                    label={`Item #${idx + 1}`}
+                    label="Product"
                     placeholder="Select product..."
                     options={(state.products || []).map(p => ({ label: p.name, value: p.id, sublabel: `Stock: ${p.availableStock} ${p.uom}` }))}
                     value={item.productId}
