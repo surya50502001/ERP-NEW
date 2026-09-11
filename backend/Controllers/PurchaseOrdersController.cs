@@ -27,13 +27,72 @@ public class PurchaseOrdersController : ControllerBase
     }
 
     [HttpPost]
-    public async Task<ActionResult<PurchaseOrder>> Create([FromBody] PurchaseOrder po)
+    public async Task<ActionResult<PurchaseOrder>> Create([FromBody] CreatePurchaseOrderDto dto)
     {
-        if (string.IsNullOrWhiteSpace(po.PoId) || po.PoId.StartsWith("PO-TEMP"))
+        var count = await _db.PurchaseOrders.CountAsync() + 1;
+        var poId = string.IsNullOrWhiteSpace(dto.PoId) || dto.PoId.StartsWith("PO-TEMP")
+            ? $"PO-{DateTime.UtcNow.Year}-{count:D5}"
+            : dto.PoId;
+
+        var po = new PurchaseOrder
         {
-            var count = await _db.PurchaseOrders.CountAsync() + 1;
-            po.PoId = $"PO-{DateTime.UtcNow.Year}-{count:D5}";
+            PoId = poId,
+            Date = dto.Date ?? DateTime.UtcNow,
+            Status = string.IsNullOrWhiteSpace(dto.Status) ? "Pending" : dto.Status,
+            SupplierName = dto.SupplierName ?? string.Empty
+        };
+
+        if (dto.Items != null)
+        {
+            foreach (var it in dto.Items)
+            {
+                int numericProdId = 0;
+                string prodCode = "";
+
+                if (it.ProductId.HasValue)
+                {
+                    var elem = it.ProductId.Value;
+                    if (elem.ValueKind == System.Text.Json.JsonValueKind.Number)
+                    {
+                        numericProdId = elem.GetInt32();
+                    }
+                    else if (elem.ValueKind == System.Text.Json.JsonValueKind.String)
+                    {
+                        prodCode = elem.GetString() ?? "";
+                        int.TryParse(prodCode, out numericProdId);
+                    }
+                }
+
+                if (numericProdId == 0)
+                {
+                    var matched = await _db.Products.FirstOrDefaultAsync(p => p.ProductId == prodCode || p.Name == it.ProductName);
+                    if (matched != null)
+                    {
+                        numericProdId = matched.Id;
+                    }
+                    else
+                    {
+                        var firstProd = await _db.Products.FirstOrDefaultAsync();
+                        numericProdId = firstProd?.Id ?? 1;
+                    }
+                }
+
+                po.Items.Add(new PurchaseOrderItem
+                {
+                    ProductId = numericProdId,
+                    Qty = it.Qty > 0 ? it.Qty : 1,
+                    ReceivedQty = it.ReceivedQty ?? 0
+                });
+            }
         }
+
+        po.Activity.Add(new PurchaseOrderActivity
+        {
+            Date = DateTime.UtcNow,
+            User = "System User",
+            Title = "PO Created",
+            Detail = $"Purchase order {po.PoId} created for {po.SupplierName}."
+        });
 
         _db.PurchaseOrders.Add(po);
         _db.AuditLogs.Add(new SystemAuditLog
@@ -113,4 +172,25 @@ public class PurchaseOrdersController : ControllerBase
         await _db.SaveChangesAsync();
         return NoContent();
     }
+}
+
+public class CreatePurchaseOrderDto
+{
+    public string? PoId { get; set; }
+    public string? SupplierId { get; set; }
+    public string? SupplierName { get; set; }
+    public DateTime? Date { get; set; }
+    public string? Status { get; set; }
+    public List<CreatePurchaseOrderItemDto>? Items { get; set; }
+}
+
+public class CreatePurchaseOrderItemDto
+{
+    public System.Text.Json.JsonElement? ProductId { get; set; }
+    public string? ProductName { get; set; }
+    public decimal Qty { get; set; }
+    public decimal? ReceivedQty { get; set; }
+    public decimal? Rate { get; set; }
+    public decimal? Amount { get; set; }
+    public string? Uom { get; set; }
 }

@@ -94,8 +94,10 @@ export default function PurchasesView({ onNavigate }) {
       const prod = (state.products || []).find(p => String(p.id) === String(item.productId) || String(p.productId) === String(item.productId));
       const qty = parseFloat(item.qty || 1);
       const rate = parseFloat(item.rate || (prod ? (prod.avgRate || prod.purchaseRate || 100) : 100));
+      const resolvedProdId = prod && !isNaN(Number(prod.id)) && Number(prod.id) > 0 ? Number(prod.id) : item.productId;
+
       return {
-        productId: item.productId,
+        productId: resolvedProdId,
         productName: prod ? prod.name : 'Custom Product',
         qty,
         uom: prod ? prod.uom : 'KG',
@@ -106,7 +108,7 @@ export default function PurchasesView({ onNavigate }) {
 
     const totalAmount = formattedItems.reduce((acc, i) => acc + i.amount, 0);
 
-    await createPurchaseOrder({
+    const res = await createPurchaseOrder({
       supplierId: supplier.partyId || supplier.id,
       supplierName: supplier.name,
       expectedDate: poExpectedDate || new Date().toISOString().split('T')[0],
@@ -115,9 +117,11 @@ export default function PurchasesView({ onNavigate }) {
       items: formattedItems
     });
 
-    setIsNewPOFormOpen(false);
-    setPoSupplierId('');
-    setPoItems([{ productId: '', qty: 100, rate: 0 }]);
+    if (res && res.success) {
+      setIsNewPOFormOpen(false);
+      setPoSupplierId('');
+      setPoItems([{ productId: '', qty: 100, rate: 0 }]);
+    }
   };
 
   const handleOpenGRNDrawer = () => {

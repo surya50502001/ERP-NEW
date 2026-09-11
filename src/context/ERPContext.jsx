@@ -1056,7 +1056,8 @@ export function ERPProvider({ children }) {
       });
       if (!res.ok) {
         const errData = await safeParse(res);
-        showToast('PO Creation Failed', errData.message || 'Server rejected purchase order.', 'error');
+        const errMsg = errData.message || (errData.errors ? Object.entries(errData.errors).map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(', ') : v}`).join('; ') : null) || errData.title || 'Server rejected purchase order.';
+        showToast('PO Creation Failed', errMsg, 'error');
         return { success: false };
       }
       const saved = await safeParse(res);
