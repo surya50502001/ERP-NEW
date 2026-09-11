@@ -171,14 +171,14 @@ function erpReducer(state, action) {
       break;
     }
     case 'RECEIVE_GOODS': {
-      const { poId, receivedItems, notes } = action.payload;
-      const grnNumber = `GRN-${1090 + Math.floor(Math.random() * 90) + 10}`;
-      const todayStr = new Date().toISOString().split('T')[0];
+      const { poId, receivedItems = [], notes, grnNumber: actionGrn, todayStr: actionDate } = action.payload;
+      const grnNumber = actionGrn || `GRN-${1090 + Math.floor(Math.random() * 90) + 10}`;
+      const todayStr = actionDate || new Date().toISOString().split('T')[0];
 
       const updatedPOs = (state.purchaseOrders || []).map(po => {
-        if (po.id === poId) {
+        if (String(po.id) === String(poId) || (po.poId && po.poId === poId)) {
           const updatedItems = (po.items || []).map(item => {
-            const rec = receivedItems.find(r => r.productId === item.productId);
+            const rec = receivedItems.find(r => String(r.productId) === String(item.productId));
             const recQty = rec ? parseFloat(rec.receivedQty || 0) : item.qty;
             return {
               ...item,
@@ -186,7 +186,7 @@ function erpReducer(state, action) {
             };
           });
 
-          const isAllReceived = updatedItems.every(i => (i.receivedQty || 0) >= i.qty);
+          const isAllReceived = updatedItems.every(i => (i.receivedQty || 0) >= (i.qty || 1));
           const isPartial = updatedItems.some(i => (i.receivedQty || 0) > 0) && !isAllReceived;
 
           return {
@@ -211,13 +211,14 @@ function erpReducer(state, action) {
 
       const newBatches = { ...(state.batches || {}) };
       const updatedProducts = (state.products || []).map(prod => {
-        const rec = receivedItems.find(r => r.productId === prod.id);
+        const rec = receivedItems.find(r => String(r.productId) === String(prod.id) || String(r.productId) === String(prod.productId));
         if (rec && parseFloat(rec.receivedQty || 0) > 0) {
           const addedQty = parseFloat(rec.receivedQty);
-          const rate = parseFloat(rec.rate || prod.avgRate);
+          const rate = parseFloat(rec.rate || prod.avgRate || prod.purchaseRate || 0);
           const batchNo = rec.batchNo || `B0${Math.floor(Math.random() * 900) + 100}`;
 
-          const prodBatches = newBatches[prod.id] ? [...newBatches[prod.id]] : [];
+          const prodKey = prod.id || prod.productId;
+          const prodBatches = newBatches[prodKey] ? [...newBatches[prodKey]] : [];
           prodBatches.push({
             batchNo,
             receivedDate: todayStr,
@@ -226,18 +227,20 @@ function erpReducer(state, action) {
             rate: rate,
             grnId: grnNumber
           });
-          newBatches[prod.id] = prodBatches;
+          newBatches[prodKey] = prodBatches;
 
-          const newTotalStock = prod.availableStock + addedQty;
-          const newStockVal = prod.stockValue + (addedQty * rate);
-          const newAvgRate = newTotalStock > 0 ? (newStockVal / newTotalStock) : prod.avgRate;
+          const currentStock = Number(prod.availableStock || 0);
+          const newTotalStock = currentStock + addedQty;
+          const currentVal = Number(prod.stockValue || (currentStock * (prod.avgRate || 0)));
+          const newStockVal = currentVal + (addedQty * rate);
+          const newAvgRate = newTotalStock > 0 ? (newStockVal / newTotalStock) : (prod.avgRate || rate);
 
           return {
             ...prod,
             availableStock: newTotalStock,
             stockValue: newStockVal,
             avgRate: Math.round(newAvgRate * 100) / 100,
-            status: newTotalStock > prod.minReorderLevel ? 'Active' : 'Low Stock'
+            status: newTotalStock > (prod.minReorderLevel || 10) ? 'Active' : 'Low Stock'
           };
         }
         return prod;
@@ -800,7 +803,7 @@ export function ERPProvider({ children }) {
           }
         };
 
-        const [parties, products, brands, uoms, itemTypes, pos, invs, countries, states, majorCats, subCats, subSubCats] = await Promise.all([
+        const [parties, products, brands, uoms, itemTypes, pos, invs, countries, states, majorCats, subCats, subSubCats, grns] = await Promise.all([
           fetch('/api/parties').then(safeJson),
           fetch('/api/products').then(safeJson),
           fetch('/api/brands').then(safeJson),
@@ -812,8 +815,46 @@ export function ERPProvider({ children }) {
           fetch('/api/states').then(safeJson),
           fetch('/api/categories/major').then(safeJson),
           fetch('/api/categories/sub').then(safeJson),
-          fetch('/api/categories/subsub').then(safeJson)
+          fetch('/api/categories/subsub').then(safeJson),
+          fetch('/api/grn').then(safeJson)
         ]);
+
+        // Merge backend POs with any locally received GRN data so receipt status is never lost
+        const mergedPOs = (pos || []).map(p => {
+          const localPO = (state.purchaseOrders || []).find(lp => String(lp.id) === String(p.id) || (lp.poId && lp.poId === p.poId));
+          return {
+            ...p,
+            status: (p.status && p.status !== 'Pending') ? p.status : (localPO?.status || p.status || 'Pending'),
+            grnId: p.grnId || localPO?.grnId || null,
+            grnDate: p.grnDate || localPO?.grnDate || null,
+            totalAmount: p.totalAmount || localPO?.totalAmount || 0,
+            itemsCount: p.itemsCount || localPO?.itemsCount || p.items?.length || 0,
+            activity: p.activity && p.activity.length > 0 ? p.activity : (localPO?.activity || [])
+          };
+        });
+
+        // Format backend GRN responses
+        const backendGrns = (grns && Array.isArray(grns) && grns.length > 0)
+          ? grns.map(g => ({
+              id: `${g.recSr}-${g.recYr}-${String(g.recNo).padStart(6, '0')}`,
+              inwardType: g.remarks || 'Direct Stock Inward',
+              supplierName: g.supplierName || g.slCode || 'Supplier',
+              dcNo: g.suppInvNo || 'DC-001',
+              date: g.recDt ? String(g.recDt).split('T')[0] : new Date().toISOString().split('T')[0],
+              totalItems: 1,
+              totalQty: g.totQty || 0,
+              totalValuation: g.totVal || 0,
+              status: g.status === 'A' ? 'Completed' : 'Cancelled',
+              storeLoc: g.storeLoc || 'MAIN'
+            }))
+          : [];
+
+        // Combine backend and local directGrns without duplicates
+        const existingGrnIds = new Set(backendGrns.map(g => g.id));
+        const combinedDirectGrns = [
+          ...backendGrns,
+          ...(state.directGrns || []).filter(lg => !existingGrnIds.has(lg.id))
+        ];
 
         dispatch({
           type: 'SET_ALL_DATA',
@@ -823,7 +864,8 @@ export function ERPProvider({ children }) {
             brands: brands || [],
             uoms: uoms || [],
             itemTypes: itemTypes || [],
-            purchaseOrders: pos || [],
+            purchaseOrders: mergedPOs,
+            directGrns: combinedDirectGrns,
             salesInvoices: invs || [],
             countries: (countries && countries.length > 0) ? countries : [],
             states: (states && states.length > 0) ? states : [],
@@ -1027,9 +1069,63 @@ export function ERPProvider({ children }) {
     }
   };
 
-  const receiveGoods = (poId, receivedItems, notes, supplierName) => {
-    dispatch({ type: 'RECEIVE_GOODS', payload: { poId, receivedItems, notes, supplierName } });
-    showToast('Goods Received', `Stock & FIFO batch ledger updated.`, 'success');
+  const receiveGoods = async (poId, receivedItems, notes, supplierName) => {
+    const grnNumber = `GRN-${1090 + Math.floor(Math.random() * 90) + 10}`;
+    const todayStr = new Date().toISOString().split('T')[0];
+
+    // 1. Dispatch locally so UI immediately updates
+    dispatch({
+      type: 'RECEIVE_GOODS',
+      payload: { poId, receivedItems, notes, supplierName, grnNumber, todayStr }
+    });
+    showToast('Goods Received', `Stock & FIFO batch ledger updated. (${grnNumber})`, 'success');
+
+    // 2. Persist to backend database via PUT /api/purchaseorders/{id}
+    try {
+      const targetPO = (state.purchaseOrders || []).find(p => String(p.id) === String(poId) || (p.poId && p.poId === poId));
+      const isAllReceived = (receivedItems || []).every(i => (parseFloat(i.receivedQty || 0) >= parseFloat(i.qty || 0)));
+      const status = isAllReceived ? 'Received' : 'Partial';
+
+      await fetch(`/api/purchaseorders/${poId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          status: status,
+          grnId: grnNumber,
+          items: (receivedItems || []).map(r => ({
+            productId: parseInt(r.productId) || 0,
+            receivedQty: parseFloat(r.receivedQty || 0)
+          }))
+        })
+      });
+
+      // 3. Post to /api/grn so backend receipt records are created
+      const dcNumber = notes && notes.includes('DC:')
+        ? notes.split('DC:')[1].replace(')', '').trim()
+        : `DC-${Date.now().toString().slice(-4)}`;
+
+      const grnPayload = {
+        compCode: '01',
+        slCode: targetPO ? (targetPO.supplierId || targetPO.supplierName || 'SUPPLIER') : (supplierName || 'SUPPLIER'),
+        suppInvNo: dcNumber,
+        storeLoc: 'MAIN',
+        remarks: notes || `Received against PO ${poId}`,
+        items: (receivedItems || []).map(r => ({
+          itemCode: String(r.productId),
+          recQty: parseFloat(r.receivedQty || 0),
+          recRate: parseFloat(r.rate || 0),
+          batchNo: r.batchNo || null
+        }))
+      };
+
+      await fetch('/api/grn', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(grnPayload)
+      });
+    } catch (err) {
+      console.warn('Backend GRN persist error:', err);
+    }
   };
 
   const createDirectGRN = async (grnData) => {

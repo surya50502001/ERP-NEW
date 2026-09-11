@@ -51,20 +51,40 @@ public class PurchaseOrdersController : ControllerBase
     }
 
     [HttpPut("{id}")]
-    public async Task<IActionResult> Update(int id, [FromBody] PurchaseOrder updated)
+    public async Task<IActionResult> Update(string id, [FromBody] PurchaseOrder updated)
     {
-        var existing = await _db.PurchaseOrders.FindAsync(id);
+        PurchaseOrder? existing = null;
+        if (int.TryParse(id, out int numId))
+        {
+            existing = await _db.PurchaseOrders.Include(p => p.Items).FirstOrDefaultAsync(p => p.Id == numId);
+        }
+        if (existing == null)
+        {
+            existing = await _db.PurchaseOrders.Include(p => p.Items).FirstOrDefaultAsync(p => p.PoId == id);
+        }
         if (existing == null) return NotFound();
 
-        existing.Status = updated.Status;
-        existing.GrnId = updated.GrnId;
+        existing.Status = updated.Status ?? existing.Status;
+        existing.GrnId = updated.GrnId ?? existing.GrnId;
+
+        if (updated.Items != null && updated.Items.Count > 0)
+        {
+            foreach (var updItem in updated.Items)
+            {
+                var existItem = existing.Items.FirstOrDefault(i => i.ProductId == updItem.ProductId || (updItem.Id > 0 && i.Id == updItem.Id));
+                if (existItem != null)
+                {
+                    existItem.ReceivedQty = updItem.ReceivedQty;
+                }
+            }
+        }
 
         _db.AuditLogs.Add(new SystemAuditLog
         {
             Entity = "PurchaseOrder",
             Action = "UPDATE",
             RecordId = existing.PoId ?? existing.Id.ToString(),
-            Details = $"Status updated to {updated.Status}, GRN: {updated.GrnId}",
+            Details = $"Status updated to {existing.Status}, GRN: {existing.GrnId}",
             UserId = "System User",
             Timestamp = DateTime.UtcNow
         });

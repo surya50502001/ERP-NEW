@@ -82,12 +82,14 @@ export default function InventoryView({ onNavigate }) {
 
   // 2. PO GRN Data
   const allPOs = state.purchaseOrders || [];
-  const openPOs = allPOs.filter(po => po.status === 'Pending' || po.status === 'Partial');
+  const openPOs = allPOs.filter(po => (po.status || 'Pending') === 'Pending' || po.status === 'Partial');
   const completedPOsWithGRN = allPOs.filter(po => po.grnId || po.status === 'Received' || po.status === 'Partial');
 
   const filteredOpenPOs = openPOs.filter(po => {
-    return po.id.toLowerCase().includes(poSearchQuery.toLowerCase()) ||
-      (po.supplierName || '').toLowerCase().includes(poSearchQuery.toLowerCase());
+    const poNum = String(po.poId || po.id || '').toLowerCase();
+    const supplier = String(po.supplierName || '').toLowerCase();
+    const query = (poSearchQuery || '').toLowerCase();
+    return !query || poNum.includes(query) || supplier.includes(query);
   });
 
   // 3. Direct GRN Data
@@ -479,10 +481,10 @@ export default function InventoryView({ onNavigate }) {
                       const totalOrdered = (po.items || []).reduce((acc, i) => acc + (parseFloat(i.qty) || 0), 0);
                       const totalRec = (po.items || []).reduce((acc, i) => acc + (parseFloat(i.receivedQty) || 0), 0);
                       return (
-                        <tr key={po.id} className="hover:bg-slate-50/80 transition-colors">
-                          <td className="py-3 px-4 font-bold font-mono text-slate-900">{po.id}</td>
-                          <td className="py-3 px-4 font-semibold text-slate-900">{po.supplierName}</td>
-                          <td className="py-3 px-4 text-slate-500 font-mono text-[11px]">{po.date}</td>
+                        <tr key={po.id || po.poId} className="hover:bg-slate-50/80 transition-colors">
+                          <td className="py-3 px-4 font-bold font-mono text-slate-900">{po.poId || (typeof po.id === 'string' && po.id.startsWith('PO') ? po.id : `PO-${po.id}`)}</td>
+                          <td className="py-3 px-4 font-semibold text-slate-900">{po.supplierName || 'Supplier'}</td>
+                          <td className="py-3 px-4 text-slate-500 font-mono text-[11px]">{po.date ? String(po.date).split('T')[0] : 'N/A'}</td>
                           <td className="py-3 px-4 text-center">
                             <span className="font-mono text-[11px] font-semibold text-slate-700 bg-slate-100 px-2 py-0.5 rounded">
                               {totalRec} / {totalOrdered} Units
@@ -492,7 +494,7 @@ export default function InventoryView({ onNavigate }) {
                             ₹{(po.totalAmount || 0).toLocaleString('en-IN')}
                           </td>
                           <td className="py-3 px-4 text-center">
-                            <StatusBadge status={po.status} />
+                            <StatusBadge status={po.status || 'Pending'} />
                           </td>
                           <td className="py-3 px-4 text-right">
                             <Button size="sm" variant="accent" onClick={() => handleOpenPOGrnModal(po)}>
@@ -534,20 +536,25 @@ export default function InventoryView({ onNavigate }) {
                       <td colSpan="6" className="py-8 text-center text-slate-400 italic">No PO Goods Receipts recorded yet.</td>
                     </tr>
                   ) : (
-                    completedPOsWithGRN.map(po => (
-                      <tr key={po.id} className="hover:bg-slate-50/50">
-                        <td className="py-2.5 px-4 font-bold font-mono text-indigo-700">
-                          {po.grnId || `GRN-PO-${po.id.replace('PO-', '')}`}
-                        </td>
-                        <td className="py-2.5 px-4 font-mono font-semibold text-slate-900">{po.id}</td>
-                        <td className="py-2.5 px-4">{po.supplierName}</td>
-                        <td className="py-2.5 px-4 text-slate-500 font-mono text-[11px]">{po.grnDate || po.date}</td>
-                        <td className="py-2.5 px-4 text-center"><StatusBadge status={po.status} /></td>
-                        <td className="py-2.5 px-4 text-right font-mono font-bold text-slate-900">
-                          ₹{(po.totalAmount || 0).toLocaleString('en-IN')}
-                        </td>
-                      </tr>
-                    ))
+                    completedPOsWithGRN.map(po => {
+                      const poNum = po.poId || (typeof po.id === 'string' && po.id.startsWith('PO') ? po.id : `PO-${po.id}`);
+                      const grnNum = po.grnId || `GRN-PO-${String(po.poId || po.id).replace('PO-', '')}`;
+                      const totalAmount = po.totalAmount || (po.items || []).reduce((acc, it) => acc + (Number(it.amount) || ((Number(it.qty) || 0) * (Number(it.rate) || 0))), 0);
+                      return (
+                        <tr key={po.id || po.poId} className="hover:bg-slate-50/50">
+                          <td className="py-2.5 px-4 font-bold font-mono text-indigo-700">
+                            {grnNum}
+                          </td>
+                          <td className="py-2.5 px-4 font-mono font-semibold text-slate-900">{poNum}</td>
+                          <td className="py-2.5 px-4">{po.supplierName || 'Supplier'}</td>
+                          <td className="py-2.5 px-4 text-slate-500 font-mono text-[11px]">{po.grnDate || (po.date ? String(po.date).split('T')[0] : 'N/A')}</td>
+                          <td className="py-2.5 px-4 text-center"><StatusBadge status={po.status || 'Received'} /></td>
+                          <td className="py-2.5 px-4 text-right font-mono font-bold text-slate-900">
+                            ₹{Number(totalAmount || 0).toLocaleString('en-IN')}
+                          </td>
+                        </tr>
+                      );
+                    })
                   )}
                 </tbody>
               </table>
