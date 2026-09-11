@@ -6,7 +6,7 @@ export default function Combobox({ label, options = [], value, onChange, placeho
   const [search, setSearch] = useState("");
   const wrapperRef = useRef(null);
 
-  const selectedOption = options.find(o => o.value === value);
+  const selectedOption = options.find(o => String(o.value) === String(value));
 
   useEffect(() => {
     function handleClickOutside(event) {
@@ -19,8 +19,8 @@ export default function Combobox({ label, options = [], value, onChange, placeho
   }, []);
 
   const filteredOptions = options.filter(o =>
-    o.label.toLowerCase().includes(search.toLowerCase()) ||
-    (o.sublabel && o.sublabel.toLowerCase().includes(search.toLowerCase()))
+    (o.label && String(o.label).toLowerCase().includes(search.toLowerCase())) ||
+    (o.sublabel && String(o.sublabel).toLowerCase().includes(search.toLowerCase()))
   );
 
   return (

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Icon from '../components/Icon';
 import Button from '../components/Button';
 import Input from '../components/Input';
@@ -9,7 +9,7 @@ import StatusBadge from '../components/StatusBadge';
 import { useERP } from '../context/ERPContext';
 
 export default function PurchasesView({ onNavigate }) {
-  const { state, createPurchaseOrder, receiveGoods, addProduct, addParty } = useERP();
+  const { state, createPurchaseOrder, receiveGoods, addProduct, addParty, navResetCounter } = useERP();
   const [selectedPO, setSelectedPO] = useState(null);
   const [statusFilter, setStatusFilter] = useState('All');
   const [searchQuery, setSearchQuery] = useState('');
@@ -37,39 +37,79 @@ export default function PurchasesView({ onNavigate }) {
   const [grnBatchNoMap, setGrnBatchNoMap] = useState({});
   const [grnNotes, setGrnNotes] = useState('');
 
+  // Reset view to main list when user re-clicks sidebar
+  useEffect(() => {
+    setIsNewPOFormOpen(false);
+    setSelectedPO(null);
+    setIsGRNDrawerOpen(false);
+  }, [navResetCounter]);
+
   if (!state) return null;
 
-  const filteredPOs = (state.purchaseOrders || []).filter(po => {
-    const matchesSearch = po.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      po.supplierName.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesStatus = statusFilter === 'All' || po.status === statusFilter;
+  const getPOTotal = (po) => {
+    if (!po) return 0;
+    if (typeof po.totalAmount === 'number' && !isNaN(po.totalAmount) && po.totalAmount > 0) {
+      return po.totalAmount;
+    }
+    if (Array.isArray(po.items) && po.items.length > 0) {
+      return po.items.reduce((acc, item) => {
+        const itemAmount = Number(item.amount);
+        if (!isNaN(itemAmount) && itemAmount > 0) return acc + itemAmount;
+        const qty = Number(item.qty || 0);
+        const rate = Number(item.rate || 0);
+        return acc + (qty * rate);
+      }, 0);
+    }
+    return 0;
+  };
+
+  const allPOs = state.purchaseOrders || [];
+
+  const filteredPOs = allPOs.filter(po => {
+    if (!po) return false;
+    const poNum = String(po.poId || po.id || '').toLowerCase();
+    const supplier = String(po.supplierName || '').toLowerCase();
+    const query = (searchQuery || '').toLowerCase();
+    const matchesSearch = !query || poNum.includes(query) || supplier.includes(query);
+    const matchesStatus = statusFilter === 'All' || (po.status || 'Pending') === statusFilter;
     return matchesSearch && matchesStatus;
   });
 
-  const currentPO = selectedPO ? (state.purchaseOrders || []).find(p => p.id === selectedPO.id) || selectedPO : null;
+  const totalPOsCount = allPOs.length;
+  const totalPurchaseValue = allPOs.reduce((acc, po) => acc + getPOTotal(po), 0);
+  const pendingPOsCount = allPOs.filter(po => (po.status || 'Pending') === 'Pending').length;
+  const receivedPOsCount = allPOs.filter(po => po.status === 'Received').length;
 
-  const handleSavePO = () => {
-    const supplier = (state.parties || []).find(p => p.id === poSupplierId);
+  const currentPO = selectedPO
+    ? allPOs.find(p => (p.poId && p.poId === selectedPO.poId) || String(p.id) === String(selectedPO.id)) || selectedPO
+    : null;
+
+  const currentPOTotal = currentPO ? getPOTotal(currentPO) : 0;
+
+  const handleSavePO = async () => {
+    const supplier = (state.parties || []).find(p => String(p.id) === String(poSupplierId) || String(p.partyId) === String(poSupplierId));
     if (!supplier || poItems.length === 0) return;
 
     const formattedItems = poItems.map(item => {
-      const prod = (state.products || []).find(p => p.id === item.productId);
+      const prod = (state.products || []).find(p => String(p.id) === String(item.productId) || String(p.productId) === String(item.productId));
+      const qty = parseFloat(item.qty || 1);
+      const rate = parseFloat(item.rate || (prod ? (prod.avgRate || prod.purchaseRate || 100) : 100));
       return {
         productId: item.productId,
         productName: prod ? prod.name : 'Custom Product',
-        qty: parseFloat(item.qty || 1),
+        qty,
         uom: prod ? prod.uom : 'KG',
-        rate: parseFloat(item.rate || (prod ? prod.avgRate : 100)),
-        amount: parseFloat(item.qty || 1) * parseFloat(item.rate || (prod ? prod.avgRate : 100))
+        rate,
+        amount: qty * rate
       };
     });
 
     const totalAmount = formattedItems.reduce((acc, i) => acc + i.amount, 0);
 
-    createPurchaseOrder({
-      supplierId: supplier.id,
+    await createPurchaseOrder({
+      supplierId: supplier.partyId || supplier.id,
       supplierName: supplier.name,
-      expectedDate: poExpectedDate || '2026-08-25',
+      expectedDate: poExpectedDate || new Date().toISOString().split('T')[0],
       itemsCount: formattedItems.length,
       totalAmount,
       items: formattedItems
@@ -84,10 +124,11 @@ export default function PurchasesView({ onNavigate }) {
     if (!currentPO) return;
     const initialQtyMap = {};
     const initialBatchMap = {};
-    currentPO.items.forEach((item) => {
-      const remaining = Math.max(0, item.qty - (item.receivedQty || 0));
-      initialQtyMap[item.productId] = remaining;
-      initialBatchMap[item.productId] = `B${Math.floor(Math.random() * 900) + 100}`;
+    (currentPO.items || []).forEach((item, idx) => {
+      const itemKey = item.productId || item.id || idx;
+      const remaining = Math.max(0, (item.qty || 0) - (item.receivedQty || 0));
+      initialQtyMap[itemKey] = remaining;
+      initialBatchMap[itemKey] = `B${Math.floor(Math.random() * 900) + 100}`;
     });
     setGrnReceivedQtyMap(initialQtyMap);
     setGrnBatchNoMap(initialBatchMap);
@@ -96,12 +137,15 @@ export default function PurchasesView({ onNavigate }) {
 
   const handleConfirmGRN = () => {
     if (!currentPO) return;
-    const receivedItemsList = currentPO.items.map(item => ({
-      productId: item.productId,
-      receivedQty: parseFloat(grnReceivedQtyMap[item.productId] || 0),
-      rate: item.rate,
-      batchNo: grnBatchNoMap[item.productId] || 'B001'
-    }));
+    const receivedItemsList = (currentPO.items || []).map((item, idx) => {
+      const itemKey = item.productId || item.id || idx;
+      return {
+        productId: item.productId || item.id,
+        receivedQty: parseFloat(grnReceivedQtyMap[itemKey] || 0),
+        rate: item.rate || 0,
+        batchNo: grnBatchNoMap[itemKey] || 'B001'
+      };
+    });
 
     receiveGoods(currentPO.id, receivedItemsList, grnNotes, currentPO.supplierName);
     setIsGRNDrawerOpen(false);
@@ -116,7 +160,7 @@ export default function PurchasesView({ onNavigate }) {
       majorGroup: 'Yarn',
       subGroup: 'Cotton Yarn',
       subSubGroup: 'Combed Cotton',
-      purchaseRate: parseFloat(newProdRate),
+      purchaseRate: parseFloat(newProdRate || 0),
       openingStock: 0
     });
     setNewProdName('');
@@ -136,7 +180,7 @@ export default function PurchasesView({ onNavigate }) {
     setIsCreatePartyOpen(false);
   };
 
-  // FULL MAIN AREA CREATION FORM FOR PO (Replaces Side Drawer)
+  // FULL MAIN AREA CREATION FORM FOR PO
   if (isNewPOFormOpen) {
     return (
       <div className="space-y-6 max-w-5xl mx-auto">
@@ -166,7 +210,11 @@ export default function PurchasesView({ onNavigate }) {
             <Combobox
               label="Select Supplier"
               placeholder="Search supplier..."
-              options={(state.parties || []).filter(p => (p.partyType || p.type) === 'Supplier' || (p.partyType || p.type) === 'Both').map(p => ({ label: p.name, value: p.id, sublabel: p.location }))}
+              options={(state.parties || []).filter(p => (p.partyType || p.type) === 'Supplier' || (p.partyType || p.type) === 'Both').map(p => ({
+                label: p.name || 'Unnamed Supplier',
+                value: p.id ?? p.partyId,
+                sublabel: p.city || p.location || p.state || ''
+              }))}
               value={poSupplierId}
               onChange={(val) => setPoSupplierId(val)}
               onCreateNew={() => setIsCreatePartyOpen(true)}
@@ -229,12 +277,20 @@ export default function PurchasesView({ onNavigate }) {
                   <Combobox
                     label="Product"
                     placeholder="Select product..."
-                    options={(state.products || []).map(p => ({ label: p.name, value: p.id, sublabel: `Stock: ${p.availableStock} ${p.uom}` }))}
+                    options={(state.products || []).map(p => ({
+                      label: p.name || 'Unnamed Product',
+                      value: p.id ?? p.productId,
+                      sublabel: `Stock: ${p.availableStock ?? 0} ${p.uom || 'KG'}`
+                    }))}
                     value={item.productId}
                     onChange={(val) => {
-                      const prod = (state.products || []).find(p => p.id === val);
+                      const prod = (state.products || []).find(p => String(p.id) === String(val) || String(p.productId) === String(val));
                       const updated = [...poItems];
-                      updated[idx] = { ...updated[idx], productId: val, rate: prod ? prod.avgRate : 200 };
+                      updated[idx] = {
+                        ...updated[idx],
+                        productId: val,
+                        rate: prod ? (prod.avgRate || prod.purchaseRate || 200) : 200
+                      };
                       setPoItems(updated);
                     }}
                     onCreateNew={() => setIsCreateProductOpen(true)}
@@ -291,7 +347,11 @@ export default function PurchasesView({ onNavigate }) {
     );
   }
 
+  // DETAILED SINGLE PO VIEW
   if (currentPO) {
+    const poNumber = currentPO.poId || (typeof currentPO.id === 'string' && currentPO.id.startsWith('PO') ? currentPO.id : `PO-${currentPO.id}`);
+    const poDate = currentPO.date ? String(currentPO.date).split('T')[0] : 'N/A';
+
     return (
       <div className="space-y-6 max-w-7xl mx-auto">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-slate-200">
@@ -304,11 +364,11 @@ export default function PurchasesView({ onNavigate }) {
             </button>
             <div>
               <div className="flex items-center gap-3">
-                <h1 className="text-xl font-bold text-slate-900 font-mono tracking-tight">{currentPO.id}</h1>
-                <StatusBadge status={currentPO.status} />
+                <h1 className="text-xl font-bold text-slate-900 font-mono tracking-tight">{poNumber}</h1>
+                <StatusBadge status={currentPO.status || 'Pending'} />
               </div>
               <p className="text-xs text-slate-500 mt-0.5 font-medium">
-                Supplier: {currentPO.supplierName} • Order Date: {currentPO.date}
+                Supplier: {currentPO.supplierName || 'N/A'} • Order Date: {poDate}
               </p>
             </div>
           </div>
@@ -320,7 +380,7 @@ export default function PurchasesView({ onNavigate }) {
                 Receive Goods (GRN)
               </Button>
             )}
-            <Button variant="secondary" size="md">
+            <Button variant="secondary" size="md" onClick={() => window.print()}>
               <Icon name="Printer" className="w-4 h-4" />
               Print PO
             </Button>
@@ -352,11 +412,11 @@ export default function PurchasesView({ onNavigate }) {
               <div className="grid grid-cols-2 gap-4 text-xs">
                 <div>
                   <span className="text-slate-400 font-semibold block uppercase text-[10px]">Supplier Name</span>
-                  <span className="font-bold text-slate-900 mt-0.5 block">{currentPO.supplierName}</span>
+                  <span className="font-bold text-slate-900 mt-0.5 block">{currentPO.supplierName || 'N/A'}</span>
                 </div>
                 <div>
                   <span className="text-slate-400 font-semibold block uppercase text-[10px]">PO Date</span>
-                  <span className="font-semibold text-slate-800 mt-0.5 block">{currentPO.date}</span>
+                  <span className="font-semibold text-slate-800 mt-0.5 block">{poDate}</span>
                 </div>
                 <div>
                   <span className="text-slate-400 font-semibold block uppercase text-[10px]">Expected Delivery</span>
@@ -378,15 +438,15 @@ export default function PurchasesView({ onNavigate }) {
               <div className="space-y-2 text-xs">
                 <div className="flex justify-between text-slate-600">
                   <span>Subtotal</span>
-                  <span className="font-mono">₹{(currentPO.totalAmount * 0.95).toLocaleString('en-IN')}</span>
+                  <span className="font-mono">₹{((currentPOTotal * 0.95) || 0).toLocaleString('en-IN')}</span>
                 </div>
                 <div className="flex justify-between text-slate-600">
                   <span>Estimated GST (5%)</span>
-                  <span className="font-mono">₹{(currentPO.totalAmount * 0.05).toLocaleString('en-IN')}</span>
+                  <span className="font-mono">₹{((currentPOTotal * 0.05) || 0).toLocaleString('en-IN')}</span>
                 </div>
                 <div className="flex justify-between font-bold text-sm text-slate-900 pt-2 border-t border-slate-100">
                   <span>Total PO Value</span>
-                  <span className="font-mono">₹{currentPO.totalAmount.toLocaleString('en-IN')}</span>
+                  <span className="font-mono">₹{(currentPOTotal || 0).toLocaleString('en-IN')}</span>
                 </div>
               </div>
             </div>
@@ -412,15 +472,22 @@ export default function PurchasesView({ onNavigate }) {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 font-medium text-slate-800">
-                {currentPO.items.map((item, idx) => (
-                  <tr key={idx} className="hover:bg-slate-50/50">
-                    <td className="py-3 px-3 font-semibold text-slate-900">{item.productName}</td>
-                    <td className="py-3 px-3 text-right font-mono font-semibold">{item.qty}</td>
-                    <td className="py-3 px-3 text-center font-mono text-slate-500">{item.uom}</td>
-                    <td className="py-3 px-3 text-right font-mono">₹{item.rate}</td>
-                    <td className="py-3 px-3 text-right font-mono font-bold text-slate-900">₹{item.amount.toLocaleString('en-IN')}</td>
-                  </tr>
-                ))}
+                {(currentPO.items || []).map((item, idx) => {
+                  const prod = (state.products || []).find(p => String(p.id) === String(item.productId) || String(p.productId) === String(item.productId));
+                  const prodName = item.productName || (prod ? prod.name : `Product #${item.productId}`);
+                  const uom = item.uom || (prod ? prod.uom : 'KG');
+                  const rate = Number(item.rate || (prod ? (prod.avgRate || prod.purchaseRate || 0) : 0));
+                  const amount = Number(item.amount || (Number(item.qty || 0) * rate));
+                  return (
+                    <tr key={idx} className="hover:bg-slate-50/50">
+                      <td className="py-3 px-3 font-semibold text-slate-900">{prodName}</td>
+                      <td className="py-3 px-3 text-right font-mono font-semibold">{item.qty || 0}</td>
+                      <td className="py-3 px-3 text-center font-mono text-slate-500">{uom}</td>
+                      <td className="py-3 px-3 text-right font-mono">₹{rate.toLocaleString('en-IN')}</td>
+                      <td className="py-3 px-3 text-right font-mono font-bold text-slate-900">₹{amount.toLocaleString('en-IN')}</td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -445,10 +512,10 @@ export default function PurchasesView({ onNavigate }) {
                   <span className="font-bold font-mono text-slate-900 text-sm">{currentPO.grnId}</span>
                   <span className="text-slate-500">{currentPO.grnDate || '2026-08-20'}</span>
                 </div>
-                <p className="text-slate-600">All line items received into Warehouse A. Stock quantities updated successfully.</p>
+                <p className="text-slate-600">All line items received into Warehouse. Stock quantities updated successfully.</p>
               </div>
             ) : (
-              <div className="py-8 text-center text-xs text-slate-400 font-medium">No GRN recorded yet. Click "Receive Goods" to log arrival.</div>
+              <div className="py-8 text-center text-xs text-slate-400 font-medium">No GRN recorded yet. Click &quot;Receive Goods&quot; to log arrival.</div>
             )}
           </div>
         )}
@@ -474,8 +541,8 @@ export default function PurchasesView({ onNavigate }) {
         <Drawer
           isOpen={isGRNDrawerOpen}
           onClose={() => setIsGRNDrawerOpen(false)}
-          title={`Receive Goods - ${currentPO.id}`}
-          subtitle={`Supplier: ${currentPO.supplierName}`}
+          title={`Receive Goods - ${poNumber}`}
+          subtitle={`Supplier: ${currentPO.supplierName || 'N/A'}`}
           footer={
             <div className="flex items-center gap-2">
               <Button variant="secondary" size="md" onClick={() => setIsGRNDrawerOpen(false)}>Cancel</Button>
@@ -492,25 +559,30 @@ export default function PurchasesView({ onNavigate }) {
               Entering received quantities will automatically generate a new GRN log, create FIFO batch entries, and update product available stock in real time.
             </div>
 
-            {currentPO.items.map((item) => {
-              const remaining = Math.max(0, item.qty - (item.receivedQty || 0));
+            {(currentPO.items || []).map((item, idx) => {
+              const itemKey = item.productId || item.id || idx;
+              const prod = (state.products || []).find(p => String(p.id) === String(item.productId) || String(p.productId) === String(item.productId));
+              const prodName = item.productName || (prod ? prod.name : `Product #${item.productId}`);
+              const uom = item.uom || (prod ? prod.uom : 'KG');
+              const remaining = Math.max(0, (item.qty || 0) - (item.receivedQty || 0));
+
               return (
-                <div key={item.productId} className="p-4 rounded-xl border border-slate-200 bg-white space-y-3 shadow-2xs">
+                <div key={itemKey} className="p-4 rounded-xl border border-slate-200 bg-white space-y-3 shadow-2xs">
                   <div className="flex justify-between font-bold text-slate-900">
-                    <span>{item.productName}</span>
-                    <span className="text-slate-500 font-mono text-[11px]">Ordered: {item.qty} {item.uom}</span>
+                    <span>{prodName}</span>
+                    <span className="text-slate-500 font-mono text-[11px]">Ordered: {item.qty || 0} {uom}</span>
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     <Input
                       label="Received Qty"
                       type="number"
-                      value={grnReceivedQtyMap[item.productId] ?? remaining}
-                      onChange={(e) => setGrnReceivedQtyMap({ ...grnReceivedQtyMap, [item.productId]: e.target.value })}
+                      value={grnReceivedQtyMap[itemKey] ?? remaining}
+                      onChange={(e) => setGrnReceivedQtyMap({ ...grnReceivedQtyMap, [itemKey]: e.target.value })}
                     />
                     <Input
                       label="Batch Number"
-                      value={grnBatchNoMap[item.productId] || 'B001'}
-                      onChange={(e) => setGrnBatchNoMap({ ...grnBatchNoMap, [item.productId]: e.target.value })}
+                      value={grnBatchNoMap[itemKey] || 'B001'}
+                      onChange={(e) => setGrnBatchNoMap({ ...grnBatchNoMap, [itemKey]: e.target.value })}
                     />
                   </div>
                 </div>
@@ -540,6 +612,30 @@ export default function PurchasesView({ onNavigate }) {
           <Icon name="Plus" className="w-4 h-4" />
           New Purchase Order
         </Button>
+      </div>
+
+      {/* KPI Metrics Summary Row */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <div className="bg-white border border-slate-200/80 rounded-xl p-4 shadow-2xs">
+          <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Total Orders</span>
+          <p className="text-2xl font-bold font-mono text-slate-900 mt-1">{totalPOsCount}</p>
+          <span className="text-[11px] text-slate-500">All registered POs</span>
+        </div>
+        <div className="bg-white border border-slate-200/80 rounded-xl p-4 shadow-2xs">
+          <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Total Purchase Value</span>
+          <p className="text-2xl font-bold font-mono text-emerald-600 mt-1">₹{totalPurchaseValue.toLocaleString('en-IN')}</p>
+          <span className="text-[11px] text-slate-500">Cumulative order value</span>
+        </div>
+        <div className="bg-white border border-slate-200/80 rounded-xl p-4 shadow-2xs">
+          <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Pending Receipt</span>
+          <p className="text-2xl font-bold font-mono text-amber-600 mt-1">{pendingPOsCount}</p>
+          <span className="text-[11px] text-slate-500">Awaiting GRN inward</span>
+        </div>
+        <div className="bg-white border border-slate-200/80 rounded-xl p-4 shadow-2xs">
+          <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Completed (Received)</span>
+          <p className="text-2xl font-bold font-mono text-indigo-600 mt-1">{receivedPOsCount}</p>
+          <span className="text-[11px] text-slate-500">Goods received into stock</span>
+        </div>
       </div>
 
       <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-white p-3 rounded-xl border border-slate-200/80 shadow-2xs">
@@ -582,28 +678,41 @@ export default function PurchasesView({ onNavigate }) {
           <tbody className="divide-y divide-slate-100 font-medium text-slate-800">
             {filteredPOs.length === 0 ? (
               <tr>
-                <td colSpan="7" className="py-8 text-center text-slate-400 italic">No purchase orders found. Click "New Purchase Order" to create one.</td>
+                <td colSpan="7" className="py-12 text-center text-slate-400">
+                  <div className="flex flex-col items-center justify-center gap-2">
+                    <Icon name="ShoppingBag" className="w-8 h-8 text-slate-300" />
+                    <p className="font-semibold text-slate-600">No purchase orders found</p>
+                    <p className="text-xs text-slate-400">Click &quot;New Purchase Order&quot; to issue an order to a supplier.</p>
+                  </div>
+                </td>
               </tr>
             ) : (
-              filteredPOs.map(po => (
-                <tr
-                  key={po.id}
-                  onClick={() => setSelectedPO(po)}
-                  className="hover:bg-slate-50/80 transition-colors cursor-pointer"
-                >
-                  <td className="py-3 px-4 font-bold font-mono text-slate-900">{po.id}</td>
-                  <td className="py-3 px-4 font-semibold text-slate-900">{po.supplierName}</td>
-                  <td className="py-3 px-4 text-slate-500">{po.date}</td>
-                  <td className="py-3 px-4 text-center font-mono">{po.itemsCount} items</td>
-                  <td className="py-3 px-4 text-right font-mono font-bold text-slate-900">₹{po.totalAmount.toLocaleString('en-IN')}</td>
-                  <td className="py-3 px-4 text-center">
-                    <StatusBadge status={po.status} />
-                  </td>
-                  <td className="py-3 px-4 text-right">
-                    <Button size="sm" variant="ghost">View</Button>
-                  </td>
-                </tr>
-              ))
+              filteredPOs.map(po => {
+                const poNumber = po.poId || (typeof po.id === 'string' && po.id.startsWith('PO') ? po.id : `PO-${po.id}`);
+                const poDate = po.date ? String(po.date).split('T')[0] : 'N/A';
+                const itemsCount = po.itemsCount ?? (po.items?.length || 0);
+                const poTotal = getPOTotal(po);
+
+                return (
+                  <tr
+                    key={po.id || po.poId || Math.random()}
+                    onClick={() => setSelectedPO(po)}
+                    className="hover:bg-slate-50/80 transition-colors cursor-pointer"
+                  >
+                    <td className="py-3 px-4 font-bold font-mono text-slate-900">{poNumber}</td>
+                    <td className="py-3 px-4 font-semibold text-slate-900">{po.supplierName || 'Unknown Supplier'}</td>
+                    <td className="py-3 px-4 text-slate-500">{poDate}</td>
+                    <td className="py-3 px-4 text-center font-mono">{itemsCount} items</td>
+                    <td className="py-3 px-4 text-right font-mono font-bold text-slate-900">₹{poTotal.toLocaleString('en-IN')}</td>
+                    <td className="py-3 px-4 text-center">
+                      <StatusBadge status={po.status || 'Pending'} />
+                    </td>
+                    <td className="py-3 px-4 text-right">
+                      <Button size="sm" variant="ghost">View</Button>
+                    </td>
+                  </tr>
+                );
+              })
             )}
           </tbody>
         </table>

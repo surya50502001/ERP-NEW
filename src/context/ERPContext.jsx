@@ -1018,8 +1018,8 @@ export function ERPProvider({ children }) {
         return { success: false };
       }
       const saved = await safeParse(res);
-      dispatch({ type: 'CREATE_PO', payload: saved });
-      showToast('PO Generated', `Purchase Order ${saved.poId || ''} generated successfully.`, 'success');
+      dispatch({ type: 'CREATE_PO', payload: { ...poData, ...saved } });
+      showToast('PO Generated', `Purchase Order ${saved.poId || poData.poId || ''} generated successfully.`, 'success');
       return { success: true, po: saved };
     } catch (err) {
       showToast('PO Creation Failed', err.message || 'Server error.', 'error');
