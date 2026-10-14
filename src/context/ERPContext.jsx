@@ -20,6 +20,7 @@ const INITIAL_ERP_DATA = {
   salesOrders: [],
   paymentsIn: [],
   salesReturns: [],
+  stockAdjustments: [],
   recentActivities: [],
   notifications: []
 };
@@ -44,6 +45,7 @@ const EMPTY_ERP_DATA = {
   salesOrders: [],
   paymentsIn: [],
   salesReturns: [],
+  stockAdjustments: [],
   recentActivities: [],
   notifications: []
 };
@@ -70,6 +72,7 @@ function loadInitialState() {
         if (!parsed.salesOrders) parsed.salesOrders = [];
         if (!parsed.paymentsIn) parsed.paymentsIn = [];
         if (!parsed.salesReturns) parsed.salesReturns = [];
+        if (!parsed.stockAdjustments) parsed.stockAdjustments = [];
         return parsed;
       }
     }
@@ -743,6 +746,137 @@ function erpReducer(state, action) {
         ...state,
         salesInvoices: updatedInvoices,
         recentActivities: [newAct, ...(state.recentActivities || [])]
+      };
+      break;
+    }
+    case 'RECORD_STOCK_ADJUSTMENT': {
+      const adj = action.payload;
+      const adjId = adj.id || `ADJ-${Date.now().toString().slice(-6)}`;
+      const todayStr = adj.date || new Date().toISOString().split('T')[0];
+      const newBatches = { ...(state.batches || {}) };
+
+      const updatedProducts = (state.products || []).map(prod => {
+        if (prod.id === adj.productId || (adj.productCode && prod.code === adj.productCode)) {
+          let qtyToDeduct = parseFloat(adj.qty || 0);
+          const prodBatches = newBatches[prod.id] ? [...newBatches[prod.id]] : [];
+
+          let updatedProdBatches;
+          if (adj.batchNo && adj.batchNo !== 'FIFO') {
+            updatedProdBatches = prodBatches.map(b => {
+              if (b.batchNo === adj.batchNo) {
+                const newQty = Math.max(0, (b.availableQty || 0) - qtyToDeduct);
+                return { ...b, availableQty: newQty };
+              }
+              return b;
+            });
+          } else {
+            updatedProdBatches = prodBatches.map(b => {
+              if (qtyToDeduct <= 0) return b;
+              if (b.availableQty <= 0) return b;
+              if (b.availableQty >= qtyToDeduct) {
+                const updated = { ...b, availableQty: b.availableQty - qtyToDeduct };
+                qtyToDeduct = 0;
+                return updated;
+              } else {
+                qtyToDeduct -= b.availableQty;
+                return { ...b, availableQty: 0 };
+              }
+            });
+          }
+
+          newBatches[prod.id] = updatedProdBatches;
+          const newStock = Math.max(0, (prod.availableStock || 0) - parseFloat(adj.qty || 0));
+          const newStockVal = newStock * (prod.avgRate || 0);
+
+          return {
+            ...prod,
+            availableStock: newStock,
+            stockValue: newStockVal,
+            status: newStock > (prod.minReorderLevel || 10) ? 'Active' : 'Low Stock'
+          };
+        }
+        return prod;
+      });
+
+      const newAdjustment = {
+        id: adjId,
+        date: todayStr,
+        productId: adj.productId,
+        productName: adj.productName,
+        batchNo: adj.batchNo || 'FIFO',
+        qty: parseFloat(adj.qty || 0),
+        reasonCode: adj.reasonCode || 'DMG-01',
+        reason: adj.reason || 'Damaged in transit',
+        remarks: adj.remarks || '',
+        adjustedBy: adj.adjustedBy || 'Store Manager',
+        status: 'Adjusted'
+      };
+
+      const newAct = {
+        id: `ACT-${Date.now()}`,
+        code: adjId,
+        party: adj.productName || 'Inventory Adjustment',
+        detail: `Stock Write-off: -${adj.qty} (${adj.reason || 'Adjustment'})`,
+        time: 'Just now',
+        type: 'inventory',
+        status: 'Warning'
+      };
+
+      newState = {
+        ...state,
+        products: updatedProducts,
+        batches: newBatches,
+        stockAdjustments: [newAdjustment, ...(state.stockAdjustments || [])],
+        recentActivities: [newAct, ...(state.recentActivities || [])]
+      };
+      break;
+    }
+    case 'LOAD_DEFAULT_MASTERS': {
+      const standardUoms = [
+        { id: 'UOM-PCS', code: 'PCS', name: 'Pieces', decimalPlaces: 0 },
+        { id: 'UOM-NOS', code: 'NOS', name: 'Numbers', decimalPlaces: 0 },
+        { id: 'UOM-KG', code: 'KG', name: 'Kilograms', decimalPlaces: 3 },
+        { id: 'UOM-BOX', code: 'BOX', name: 'Boxes', decimalPlaces: 0 },
+        { id: 'UOM-LTR', code: 'LTR', name: 'Litres', decimalPlaces: 2 },
+        { id: 'UOM-MTR', code: 'MTR', name: 'Metres', decimalPlaces: 2 }
+      ];
+
+      const currentUoms = [...(state.uoms || [])];
+      for (const u of standardUoms) {
+        if (!currentUoms.some(x => x.code === u.code || x.uomCode === u.code)) {
+          currentUoms.push(u);
+        }
+      }
+
+      const defaultCategories = [
+        { id: 'CAT-GEN', code: 'GEN', name: 'General' },
+        { id: 'CAT-ELEC', code: 'ELEC', name: 'Electronics' },
+        { id: 'CAT-RAW', code: 'RAW', name: 'Raw Materials' }
+      ];
+
+      const currentMajor = [...(state.categories?.major || [])];
+      for (const c of defaultCategories) {
+        if (!currentMajor.some(x => x.code === c.code || x.name === c.name)) {
+          currentMajor.push(c);
+        }
+      }
+
+      const defaultBrands = [
+        { id: 'BRD-GEN', name: 'Generic' }
+      ];
+
+      const currentBrands = [...(state.brands || [])];
+      for (const b of defaultBrands) {
+        if (!currentBrands.some(x => x.name === b.name)) {
+          currentBrands.push(b);
+        }
+      }
+
+      newState = {
+        ...state,
+        uoms: currentUoms,
+        categories: { ...(state.categories || {}), major: currentMajor },
+        brands: currentBrands
       };
       break;
     }
@@ -1976,6 +2110,77 @@ export function ERPProvider({ children }) {
     return { success: true };
   };
 
+  const recordStockAdjustment = (adjustment) => {
+    dispatch({ type: 'RECORD_STOCK_ADJUSTMENT', payload: adjustment });
+    showToast('Stock Adjusted', `Wrote off ${adjustment.qty} units for ${adjustment.productName}.`, 'warning');
+    return { success: true };
+  };
+
+  const loadDefaultMasters = async () => {
+    try {
+      const res = await fetch('/api/masters/seed', { method: 'POST' });
+      if (res.ok) {
+        const data = await safeParse(res);
+        dispatch({ type: 'LOAD_DEFAULT_MASTERS' });
+        showToast('Masters Loaded', 'Standard UOMs, Categories, and Brand seeded successfully.', 'success');
+        return { success: true, ...data };
+      }
+    } catch (e) {
+      console.warn('Backend masters seed note:', e);
+    }
+    dispatch({ type: 'LOAD_DEFAULT_MASTERS' });
+    showToast('Masters Loaded', 'Default UOMs, Categories, and Brand loaded in system.', 'success');
+    return { success: true };
+  };
+
+  const fetchUsers = async () => {
+    try {
+      const res = await fetch('/api/auth/users');
+      if (res.ok) {
+        return await safeParse(res);
+      }
+    } catch (e) {
+      console.warn('Backend fetch users note:', e);
+    }
+    return [
+      { userId: 'USR-ADMIN-01', fullName: 'System Administrator', email: 'admin@primeerp.com', role: 'Admin', companyName: 'Prime ERP Enterprise' },
+      { userId: 'USR-MGR-02', fullName: 'Inventory Store Manager', email: 'manager@primeerp.com', role: 'Store Manager', companyName: 'Prime ERP Enterprise' },
+      { userId: 'USR-ACC-03', fullName: 'Senior Accountant', email: 'billing@primeerp.com', role: 'Accountant / Billing', companyName: 'Prime ERP Enterprise' }
+    ];
+  };
+
+  const deleteUser = async (userId) => {
+    try {
+      const res = await fetch(`/api/auth/users/${userId}`, { method: 'DELETE' });
+      if (res.ok) {
+        showToast('User Removed', 'User account deactivated.', 'success');
+        return { success: true };
+      }
+    } catch (e) {
+      console.warn('Backend delete user note:', e);
+    }
+    showToast('User Removed', 'User account deactivated.', 'success');
+    return { success: true };
+  };
+
+  const updateUserRole = async (userId, role) => {
+    try {
+      const res = await fetch(`/api/auth/users/${userId}/role`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ role })
+      });
+      if (res.ok) {
+        showToast('Role Updated', `User role changed to ${role}.`, 'success');
+        return { success: true };
+      }
+    } catch (e) {
+      console.warn('Backend update role note:', e);
+    }
+    showToast('Role Updated', `User role changed to ${role}.`, 'success');
+    return { success: true };
+  };
+
   const clearAllData = () => {
     dispatch({ type: 'CLEAR_ALL_DATA' });
     showToast('Data Cleared', 'All mock records cleared.');
@@ -2008,6 +2213,11 @@ export function ERPProvider({ children }) {
     recordPaymentIn,
     createSalesReturn,
     createSalesOrder,
+    recordStockAdjustment,
+    loadDefaultMasters,
+    fetchUsers,
+    deleteUser,
+    updateUserRole,
     approveInvoice,
     rejectInvoice,
     addItemType,

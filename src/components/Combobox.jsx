@@ -10,7 +10,8 @@ export default function Combobox({
   onCreateNew, // callback: (searchTerm: string) => void
   createLabel = "+ Create item",
   entityName = "item",
-  className = ""
+  className = "",
+  error = null
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -45,7 +46,11 @@ export default function Combobox({
     <div className={`w-full relative ${className}`} ref={wrapperRef}>
       {label && <label className="block text-xs font-semibold text-slate-700 mb-1.5">{label}</label>}
       <div
-        className="w-full rounded-lg border border-slate-200 bg-white py-1.5 px-3 text-sm text-slate-900 focus-within:border-slate-900 focus-within:ring-1 focus-within:ring-slate-900 flex items-center justify-between cursor-pointer transition-colors shadow-xs"
+        className={`w-full rounded-lg border bg-white py-1.5 px-3 text-sm text-slate-900 flex items-center justify-between cursor-pointer transition-colors shadow-xs ${
+          error
+            ? 'border-rose-500 focus-within:border-rose-500 focus-within:ring-1 focus-within:ring-rose-500'
+            : 'border-slate-200 focus-within:border-slate-900 focus-within:ring-1 focus-within:ring-slate-900'
+        }`}
         onClick={() => setIsOpen(!isOpen)}
       >
         <span className={selectedOption ? 'text-slate-900 font-medium truncate' : 'text-slate-400'}>
@@ -53,6 +58,7 @@ export default function Combobox({
         </span>
         <Icon name="ChevronDown" className="w-4 h-4 text-slate-400 shrink-0 ml-1" />
       </div>
+      {error && <p className="mt-1 text-[11px] text-rose-600 font-medium">{error}</p>}
 
       {isOpen && (
         <div className="absolute z-50 mt-1 w-full rounded-xl border border-slate-200 bg-white shadow-xl overflow-hidden py-1 text-sm animate-in fade-in duration-100">

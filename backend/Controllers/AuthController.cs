@@ -58,4 +58,40 @@ public class AuthController : ControllerBase
         if (profile == null) return NotFound(new { message = "User not found." });
         return Ok(profile);
     }
+
+    [HttpGet("users")]
+    public async Task<IActionResult> GetAllUsers()
+    {
+        try
+        {
+            var users = await _authService.GetAllUsersAsync();
+            return Ok(users);
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
+    [HttpDelete("users/{userId}")]
+    public async Task<IActionResult> DeleteUser(string userId)
+    {
+        var success = await _authService.DeleteUserAsync(userId);
+        if (!success) return NotFound(new { message = "User not found." });
+        return Ok(new { message = "User deleted successfully." });
+    }
+
+    [HttpPut("users/{userId}/role")]
+    public async Task<IActionResult> UpdateUserRole(string userId, [FromBody] UpdateRoleRequest request)
+    {
+        var success = await _authService.UpdateUserRoleAsync(userId, request.Role);
+        if (!success) return NotFound(new { message = "User not found." });
+        return Ok(new { message = "Role updated successfully." });
+    }
 }
+
+public class UpdateRoleRequest
+{
+    public string Role { get; set; } = string.Empty;
+}
+

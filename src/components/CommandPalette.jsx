@@ -7,8 +7,18 @@ export default function CommandPalette() {
   const [query, setQuery] = useState('');
 
   useEffect(() => {
-    if (!isCmdPaletteOpen) setQuery('');
-  }, [isCmdPaletteOpen]);
+    if (!isCmdPaletteOpen) {
+      setQuery('');
+      return;
+    }
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        setIsCmdPaletteOpen(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isCmdPaletteOpen, setIsCmdPaletteOpen]);
 
   if (!isCmdPaletteOpen || !state) return null;
 

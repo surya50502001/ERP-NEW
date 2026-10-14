@@ -202,4 +202,21 @@ public class MastersController : ControllerBase
         }
     }
     #endregion
+
+    #region Seed
+    [HttpPost("seed")]
+    public async Task<IActionResult> SeedDefaultMasters()
+    {
+        try
+        {
+            var result = await _masterService.SeedDefaultMastersAsync();
+            return Ok(result);
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+    #endregion
 }
+

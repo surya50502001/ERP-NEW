@@ -5,6 +5,7 @@ import Input from '../components/Input';
 import Select from '../components/Select';
 import StatusBadge from '../components/StatusBadge';
 import { useERP } from '../context/ERPContext';
+import PartyLedgerModal from '../components/PartyLedgerModal';
 
 export default function MastersView({ onNavigate }) {
   const {
@@ -44,6 +45,7 @@ export default function MastersView({ onNavigate }) {
   } = useERP();
 
   const [subTab, setSubTab] = useState('overview');
+  const [selectedLedgerParty, setSelectedLedgerParty] = useState(null);
 
   // Reset view to overview whenever sidebar navigation tab is re-clicked
   useEffect(() => {
@@ -1464,7 +1466,13 @@ export default function MastersView({ onNavigate }) {
                   return (
                     <tr key={p.id} className="hover:bg-slate-50/80 align-top">
                       <td className="py-3 px-4">
-                        <div className="font-bold text-slate-900">{p.name || p.slName}</div>
+                        <button
+                          type="button"
+                          onClick={() => setSelectedLedgerParty(p)}
+                          className="font-bold text-slate-900 hover:text-indigo-600 hover:underline text-left cursor-pointer transition-colors block"
+                        >
+                          {p.name || p.slName}
+                        </button>
                         <div className="text-[10px] font-mono text-slate-400">{p.partyId || p.slCode || `PTY-${p.id}`}</div>
                       </td>
                       <td className="py-3 px-4 text-center">
@@ -1505,13 +1513,21 @@ export default function MastersView({ onNavigate }) {
                       </td>
                       <td className="py-3 px-4 text-right whitespace-nowrap">
                         <button
+                          type="button"
+                          onClick={() => setSelectedLedgerParty(p)}
+                          className="p-1 text-slate-500 hover:text-emerald-600 hover:bg-emerald-50 rounded transition-colors mr-1 cursor-pointer"
+                          title="View Party Ledger Statement"
+                        >
+                          <Icon name="FileText" className="w-4 h-4" />
+                        </button>
+                        <button
                           onClick={() => setEditingItem({ type: 'party', data: { ...p } })}
-                          className="p-1 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded transition-colors mr-1"
+                          className="p-1 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded transition-colors mr-1 cursor-pointer"
                           title="Edit Party"
                         >
                           <Icon name="Edit" className="w-4 h-4" />
                         </button>
-                        <button onClick={() => deleteParty(p.id || p.partyId || p.name)} className="p-1 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded transition-colors" title="Delete Party">
+                        <button onClick={() => deleteParty(p.id || p.partyId || p.name)} className="p-1 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded transition-colors cursor-pointer" title="Delete Party">
                           <Icon name="Trash2" className="w-4 h-4" />
                         </button>
                       </td>
@@ -1524,6 +1540,14 @@ export default function MastersView({ onNavigate }) {
         </div>
 
         {renderEditModal()}
+
+        {selectedLedgerParty && (
+          <PartyLedgerModal
+            isOpen={Boolean(selectedLedgerParty)}
+            onClose={() => setSelectedLedgerParty(null)}
+            party={selectedLedgerParty}
+          />
+        )}
       </div>
     );
   }

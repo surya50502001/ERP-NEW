@@ -31,6 +31,9 @@ public interface IMasterDataService
     // Delivery Locations
     Task<List<DeliveryLocationDto>> GetDeliveryLocationsAsync(string compCode = "01");
     Task<DeliveryLocationDto> CreateDeliveryLocationAsync(CreateDeliveryLocationDto dto, string user = "SYSTEM");
+
+    // Default Masters Seeding
+    Task<object> SeedDefaultMastersAsync();
 }
 
 public class MasterDataService : IMasterDataService
@@ -621,4 +624,89 @@ public class MasterDataService : IMasterDataService
         };
     }
     #endregion
+
+    #region Default Seeding
+    public async Task<object> SeedDefaultMastersAsync()
+    {
+        int uomsAdded = 0;
+        int categoriesAdded = 0;
+        int brandsAdded = 0;
+
+        var standardUoms = new[]
+        {
+            new { Code = "PCS", Name = "Pieces", DecimalPlaces = 0 },
+            new { Code = "NOS", Name = "Numbers", DecimalPlaces = 0 },
+            new { Code = "KG", Name = "Kilograms", DecimalPlaces = 3 },
+            new { Code = "BOX", Name = "Boxes", DecimalPlaces = 0 },
+            new { Code = "LTR", Name = "Litres", DecimalPlaces = 2 },
+            new { Code = "MTR", Name = "Metres", DecimalPlaces = 2 }
+        };
+
+        foreach (var u in standardUoms)
+        {
+            if (!await _db.Uoms.AnyAsync(x => x.Code == u.Code))
+            {
+                _db.Uoms.Add(new Uom
+                {
+                    UomId = $"UOM-{u.Code}",
+                    Code = u.Code,
+                    Name = u.Name,
+                    DecimalPlaces = u.DecimalPlaces
+                });
+                uomsAdded++;
+            }
+        }
+
+        var defaultCategories = new[]
+        {
+            new { Code = "GEN", Name = "General" },
+            new { Code = "ELEC", Name = "Electronics" },
+            new { Code = "RAW", Name = "Raw Materials" }
+        };
+
+        foreach (var cat in defaultCategories)
+        {
+            if (!await _db.MajorCategories.AnyAsync(x => x.Code == cat.Code || x.Name == cat.Name))
+            {
+                _db.MajorCategories.Add(new MajorCategory
+                {
+                    MajorId = $"CAT-{cat.Code}",
+                    Code = cat.Code,
+                    Name = cat.Name
+                });
+                categoriesAdded++;
+            }
+        }
+
+        var defaultBrands = new[]
+        {
+            new { Id = "BRD-GEN", Name = "Generic" }
+        };
+
+        foreach (var b in defaultBrands)
+        {
+            if (!await _db.Brands.AnyAsync(x => x.Name == b.Name))
+            {
+                _db.Brands.Add(new Brand
+                {
+                    BrandId = b.Id,
+                    Name = b.Name
+                });
+                brandsAdded++;
+            }
+        }
+
+        await _db.SaveChangesAsync();
+
+        return new
+        {
+            success = true,
+            message = "Default masters successfully verified and seeded.",
+            uomsAdded,
+            categoriesAdded,
+            brandsAdded
+        };
+    }
+    #endregion
 }
+

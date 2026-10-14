@@ -12,9 +12,10 @@ import PaymentOutTab from './purchases/PaymentOutTab';
 import DebitNotesTab from './purchases/DebitNotesTab';
 import QuickCreatePartyModal from '../components/QuickCreatePartyModal';
 import QuickCreateProductModal from '../components/QuickCreateProductModal';
+import PrintableDocumentModal from '../components/PrintableDocumentModal';
 
 export default function PurchasesView({ onNavigate }) {
-  const { state, createPurchaseOrder, receiveGoods, addProduct, addParty, navResetCounter } = useERP();
+  const { state, createPurchaseOrder, receiveGoods, addProduct, addParty, navResetCounter, showToast } = useERP();
   const [subTab, setSubTab] = useState('orders'); // 'orders' | 'bills' | 'payment-out' | 'debit-notes'
   const [selectedPO, setSelectedPO] = useState(null);
   const [statusFilter, setStatusFilter] = useState('All');
@@ -25,6 +26,8 @@ export default function PurchasesView({ onNavigate }) {
   const [isGRNDrawerOpen, setIsGRNDrawerOpen] = useState(false);
   const [isCreateProductOpen, setIsCreateProductOpen] = useState(false);
   const [isCreatePartyOpen, setIsCreatePartyOpen] = useState(false);
+  const [printablePO, setPrintablePO] = useState(null);
+  const [poErrors, setPoErrors] = useState({});
 
   // Quick Create Modals
   const [quickPartyModal, setQuickPartyModal] = useState({ isOpen: false, name: '', type: 'Supplier' });
@@ -98,8 +101,48 @@ export default function PurchasesView({ onNavigate }) {
   const currentPOTotal = currentPO ? getPOTotal(currentPO) : 0;
 
   const handleSavePO = async () => {
+    const errors = {};
+    if (!poSupplierId) {
+      errors.supplier = 'Please select a supplier.';
+    }
+    const itemErrors = [];
+    let hasItemError = false;
+
+    if (!poItems || poItems.length === 0) {
+      errors.items = 'At least one line item is required.';
+    } else {
+      poItems.forEach((item, idx) => {
+        const itemErr = {};
+        if (!item.productId) {
+          itemErr.productId = 'Product is required';
+          hasItemError = true;
+        }
+        if (!item.qty || parseFloat(item.qty) <= 0) {
+          itemErr.qty = 'Qty must be > 0';
+          hasItemError = true;
+        }
+        if (item.rate === '' || item.rate === undefined || parseFloat(item.rate) <= 0) {
+          itemErr.rate = 'Rate must be > 0';
+          hasItemError = true;
+        }
+        itemErrors[idx] = itemErr;
+      });
+    }
+
+    if (hasItemError) errors.itemErrors = itemErrors;
+
+    if (Object.keys(errors).length > 0) {
+      setPoErrors(errors);
+      showToast?.('Validation Error', 'Please complete all required fields with positive values.', 'error');
+      return;
+    }
+    setPoErrors({});
+
     const supplier = (state.parties || []).find(p => String(p.id) === String(poSupplierId) || String(p.partyId) === String(poSupplierId));
-    if (!supplier || poItems.length === 0) return;
+    if (!supplier) {
+      setPoErrors({ supplier: 'Selected supplier not found in records.' });
+      return;
+    }
 
     const formattedItems = poItems.map(item => {
       const prod = (state.products || []).find(p => String(p.id) === String(item.productId) || String(p.productId) === String(item.productId));
@@ -132,6 +175,7 @@ export default function PurchasesView({ onNavigate }) {
       setIsNewPOFormOpen(false);
       setPoSupplierId('');
       setPoItems([{ productId: '', qty: 100, rate: 0 }]);
+      setPoErrors({});
     }
   };
 
@@ -161,6 +205,12 @@ export default function PurchasesView({ onNavigate }) {
         batchNo: grnBatchNoMap[itemKey] || 'B001'
       };
     });
+
+    const hasValidQty = receivedItemsList.some(i => i.receivedQty > 0);
+    if (!hasValidQty) {
+      showToast?.('Validation Error', 'At least one received quantity must be greater than zero.', 'error');
+      return;
+    }
 
     receiveGoods(currentPO.id, receivedItemsList, grnNotes, currentPO.supplierName);
     setIsGRNDrawerOpen(false);
@@ -226,13 +276,17 @@ export default function PurchasesView({ onNavigate }) {
               label="Select Supplier"
               placeholder="Search supplier..."
               entityName="Supplier"
+              error={poErrors.supplier}
               options={(state.parties || []).filter(p => (p.partyType || p.type) === 'Supplier' || (p.partyType || p.type) === 'Both').map(p => ({
                 label: p.name || 'Unnamed Supplier',
                 value: p.id ?? p.partyId,
                 sublabel: p.city || p.location || p.state || ''
               }))}
               value={poSupplierId}
-              onChange={(val) => setPoSupplierId(val)}
+              onChange={(val) => {
+                setPoSupplierId(val);
+                if (poErrors.supplier) setPoErrors({ ...poErrors, supplier: undefined });
+              }}
               onCreateNew={(term) => setQuickPartyModal({ isOpen: true, name: term, type: 'Supplier' })}
               createLabel="+ Create new supplier"
             />
@@ -251,6 +305,7 @@ export default function PurchasesView({ onNavigate }) {
               <div>
                 <h3 className="font-bold text-slate-900 text-sm">Order Line Items</h3>
                 <p className="text-[11px] text-slate-500">Products, quantities, and rates for this purchase order</p>
+                {poErrors.items && <p className="text-xs text-rose-500 font-medium mt-1">{poErrors.items}</p>}
               </div>
               <Button
                 type="button"
@@ -278,6 +333,8 @@ export default function PurchasesView({ onNavigate }) {
                 const qty = parseFloat(item.qty) || 0;
                 const rate = parseFloat(item.rate) || 0;
                 const amount = Math.round(qty * rate);
+                const itemErr = poErrors.itemErrors?.[idx];
+
                 return (
                   <div key={idx} className="flex flex-col sm:grid sm:grid-cols-12 gap-2 sm:gap-3 p-2.5 sm:px-3 sm:py-2 items-center hover:bg-slate-50/60 transition-colors">
                     <div className="hidden sm:block col-span-1 text-center font-bold text-xs text-slate-400">
@@ -287,6 +344,7 @@ export default function PurchasesView({ onNavigate }) {
                       <Combobox
                         placeholder="Select product..."
                         entityName="Product"
+                        error={itemErr?.productId}
                         options={(state.products || []).map(p => ({
                           label: p.name || 'Unnamed Product',
                           value: p.id ?? p.productId,
@@ -311,10 +369,14 @@ export default function PurchasesView({ onNavigate }) {
                       <div className="flex-1 sm:col-span-2">
                         <input
                           type="number"
-                          min="0"
+                          min="0.01"
                           step="any"
                           placeholder="Qty"
-                          className="w-full text-right py-1.5 px-2.5 text-xs rounded-lg border border-slate-200 bg-white font-mono focus:outline-none focus:border-slate-900 focus:ring-1 focus:ring-slate-900"
+                          className={`w-full text-right py-1.5 px-2.5 text-xs rounded-lg border font-mono focus:outline-none ${
+                            itemErr?.qty
+                              ? 'border-rose-500 ring-1 ring-rose-500 bg-rose-50/20'
+                              : 'border-slate-200 bg-white focus:border-slate-900 focus:ring-1 focus:ring-slate-900'
+                          }`}
                           value={item.qty}
                           onChange={(e) => {
                             const updated = [...poItems];
@@ -322,14 +384,19 @@ export default function PurchasesView({ onNavigate }) {
                             setPoItems(updated);
                           }}
                         />
+                        {itemErr?.qty && <p className="text-[10px] text-rose-500 mt-0.5 text-right">{itemErr.qty}</p>}
                       </div>
                       <div className="flex-1 sm:col-span-2">
                         <input
                           type="number"
-                          min="0"
+                          min="0.01"
                           step="any"
                           placeholder="Rate"
-                          className="w-full text-right py-1.5 px-2.5 text-xs rounded-lg border border-slate-200 bg-white font-mono focus:outline-none focus:border-slate-900 focus:ring-1 focus:ring-slate-900"
+                          className={`w-full text-right py-1.5 px-2.5 text-xs rounded-lg border font-mono focus:outline-none ${
+                            itemErr?.rate
+                              ? 'border-rose-500 ring-1 ring-rose-500 bg-rose-50/20'
+                              : 'border-slate-200 bg-white focus:border-slate-900 focus:ring-1 focus:ring-slate-900'
+                          }`}
                           value={item.rate}
                           onChange={(e) => {
                             const updated = [...poItems];
@@ -337,6 +404,7 @@ export default function PurchasesView({ onNavigate }) {
                             setPoItems(updated);
                           }}
                         />
+                        {itemErr?.rate && <p className="text-[10px] text-rose-500 mt-0.5 text-right">{itemErr.rate}</p>}
                       </div>
                       <div className="flex-1 sm:col-span-1 text-right">
                         <span className="font-mono font-bold text-xs text-slate-800">₹{amount.toLocaleString('en-IN')}</span>
@@ -435,7 +503,7 @@ export default function PurchasesView({ onNavigate }) {
                 Receive Goods (GRN)
               </Button>
             )}
-            <Button variant="secondary" size="md" onClick={() => window.print()}>
+            <Button variant="secondary" size="md" onClick={() => setPrintablePO(currentPO)}>
               <Icon name="Printer" className="w-4 h-4" />
               Print PO
             </Button>
@@ -814,7 +882,17 @@ export default function PurchasesView({ onNavigate }) {
                       <StatusBadge status={po.status || 'Pending'} />
                     </td>
                     <td className="py-3 px-4 text-right">
-                      <Button size="sm" variant="ghost">View</Button>
+                      <div className="flex items-center justify-end gap-1" onClick={(e) => e.stopPropagation()}>
+                        <button
+                          type="button"
+                          onClick={() => setPrintablePO(po)}
+                          className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors cursor-pointer"
+                          title="Print Purchase Order"
+                        >
+                          <Icon name="Printer" className="w-4 h-4" />
+                        </button>
+                        <Button size="sm" variant="ghost" onClick={() => setSelectedPO(po)}>View</Button>
+                      </div>
                     </td>
                   </tr>
                 );
@@ -824,6 +902,15 @@ export default function PurchasesView({ onNavigate }) {
         </table>
       </div>
     </div>
+    )}
+
+    {printablePO && (
+      <PrintableDocumentModal
+        isOpen={Boolean(printablePO)}
+        onClose={() => setPrintablePO(null)}
+        docType="PURCHASE_ORDER"
+        data={printablePO}
+      />
     )}
   </div>
   );

@@ -9,12 +9,14 @@ import StatusBadge from '../components/StatusBadge';
 import { useERP } from '../context/ERPContext';
 import QuickCreatePartyModal from '../components/QuickCreatePartyModal';
 import QuickCreateProductModal from '../components/QuickCreateProductModal';
+import StockAdjustmentTab from './inventory/StockAdjustmentTab';
 
 export default function InventoryView({ onNavigate }) {
-  const { state, receiveGoods, createDirectGRN, addParty, addProduct, navResetCounter } = useERP();
+  const { state, receiveGoods, createDirectGRN, addParty, addProduct, navResetCounter, showToast } = useERP();
 
-  // Sub-Tab Navigation: 'stock' | 'po_grn' | 'direct_grn'
+  // Sub-Tab Navigation: 'stock' | 'po_grn' | 'direct_grn' | 'adjustment'
   const [subTab, setSubTab] = useState('stock');
+  const [directGrnErrors, setDirectGrnErrors] = useState({});
 
   // Stock Filter State
   const [searchQuery, setSearchQuery] = useState('');
@@ -152,15 +154,57 @@ export default function InventoryView({ onNavigate }) {
   };
 
   const handleSaveDirectGRN = async () => {
+    const errors = {};
+    if (directInwardType === 'Direct Purchase' && !directSupplierId) {
+      errors.supplier = 'Please select a supplier for direct purchase.';
+    }
+
+    const itemErrors = [];
+    let hasItemError = false;
+
+    if (!directItems || directItems.length === 0) {
+      errors.items = 'At least one line item is required.';
+    } else {
+      directItems.forEach((item, idx) => {
+        const itemErr = {};
+        if (!item.productId) {
+          itemErr.productId = 'Product is required';
+          hasItemError = true;
+        }
+        if (!item.qty || parseFloat(item.qty) <= 0) {
+          itemErr.qty = 'Qty must be > 0';
+          hasItemError = true;
+        }
+        if (item.rate === '' || item.rate === undefined || parseFloat(item.rate) <= 0) {
+          itemErr.rate = 'Rate must be > 0';
+          hasItemError = true;
+        }
+        if (!item.batchNo || !item.batchNo.trim()) {
+          itemErr.batchNo = 'Batch No is required';
+          hasItemError = true;
+        }
+        itemErrors[idx] = itemErr;
+      });
+    }
+
+    if (hasItemError) errors.itemErrors = itemErrors;
+
+    if (Object.keys(errors).length > 0) {
+      setDirectGrnErrors(errors);
+      showToast?.('Validation Error', 'Please complete all required fields with valid quantities and rates.', 'error');
+      return;
+    }
+    setDirectGrnErrors({});
+
     const supplier = (state.parties || []).find(p => p.id === directSupplierId);
     const formattedItems = directItems.map(item => {
-      const prod = allProducts.find(p => p.id === item.productId) || allProducts[0];
+      const prod = allProducts.find(p => p.id === item.productId);
       return {
-        productId: item.productId || (prod ? prod.id : 'PRD-001'),
-        productName: prod ? prod.name : 'Raw Material Item',
-        qty: parseFloat(item.qty || 1),
-        rate: parseFloat(item.rate || (prod ? prod.avgRate : 100)),
-        batchNo: item.batchNo || `DB${Math.floor(Math.random() * 900) + 100}`,
+        productId: item.productId,
+        productName: prod ? prod.name : 'Inward Item',
+        qty: parseFloat(item.qty),
+        rate: parseFloat(item.rate),
+        batchNo: item.batchNo.trim(),
         warehouse: directStoreLoc
       };
     });
@@ -168,7 +212,7 @@ export default function InventoryView({ onNavigate }) {
     await createDirectGRN({
       inwardType: directInwardType,
       supplierId: supplier ? supplier.id : null,
-      supplierName: supplier ? supplier.name : 'Internal / Direct Source',
+      supplierName: supplier ? supplier.name : (directInwardType || 'Direct Source'),
       dcNo: directDcNo || `DDC-${Date.now().toString().slice(-4)}`,
       date: directDate,
       notes: directNotes,
@@ -181,6 +225,7 @@ export default function InventoryView({ onNavigate }) {
     setDirectDcNo('');
     setDirectNotes('');
     setDirectItems([{ productId: '', qty: 100, rate: 0, batchNo: `DB${Math.floor(Math.random() * 900) + 100}` }]);
+    setDirectGrnErrors({});
   };
 
   // Quick inline creators
@@ -289,6 +334,23 @@ export default function InventoryView({ onNavigate }) {
             subTab === 'direct_grn' ? 'bg-emerald-800 text-emerald-100' : 'bg-slate-200 text-slate-700'
           }`}>
             {directGrnList.length}
+          </span>
+        </button>
+
+        <button
+          onClick={() => setSubTab('adjustment')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+            subTab === 'adjustment'
+              ? 'bg-rose-600 text-white shadow-xs'
+              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+          }`}
+        >
+          <Icon name="AlertTriangle" className="w-4 h-4" />
+          <span>Stock Adjustment / Wastage</span>
+          <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
+            subTab === 'adjustment' ? 'bg-rose-700 text-rose-100' : 'bg-slate-200 text-slate-700'
+          }`}>
+            {(state.stockAdjustments || []).length}
           </span>
         </button>
       </div>
@@ -660,6 +722,10 @@ export default function InventoryView({ onNavigate }) {
         </div>
       )}
 
+      {subTab === 'adjustment' && (
+        <StockAdjustmentTab />
+      )}
+
       {/* ========================================================= */}
       {/* MODAL / DRAWER: PO GOODS RECEIPT (PO GRN) FORM */}
       {/* ========================================================= */}
@@ -770,9 +836,13 @@ export default function InventoryView({ onNavigate }) {
               label="Supplier / Source Party"
               placeholder="Select or search party..."
               entityName="Party"
+              error={directGrnErrors.supplier}
               options={(state.parties || []).map(p => ({ label: p.name, value: p.id, sublabel: p.partyType || p.type }))}
               value={directSupplierId}
-              onChange={(val) => setDirectSupplierId(val)}
+              onChange={(val) => {
+                setDirectSupplierId(val);
+                if (directGrnErrors.supplier) setDirectGrnErrors({ ...directGrnErrors, supplier: undefined });
+              }}
               onCreateNew={(term) => setQuickPartyModal({ isOpen: true, name: term, type: 'Supplier' })}
               createLabel="+ Create new party"
             />
@@ -818,7 +888,10 @@ export default function InventoryView({ onNavigate }) {
           {/* Line Items for Direct GRN */}
           <div className="space-y-3 pt-3 border-t border-slate-200">
             <div className="flex items-center justify-between">
-              <h4 className="font-bold text-slate-900 text-sm">Inward Item Lines</h4>
+              <div>
+                <h4 className="font-bold text-slate-900 text-sm">Inward Item Lines</h4>
+                {directGrnErrors.items && <p className="text-xs text-rose-500 font-medium mt-0.5">{directGrnErrors.items}</p>}
+              </div>
               <Button type="button" variant="secondary" size="sm" onClick={handleAddDirectItemRow}>
                 + Add Line
               </Button>
@@ -836,71 +909,89 @@ export default function InventoryView({ onNavigate }) {
               </div>
 
               {/* Item Rows */}
-              {directItems.map((item, idx) => (
-                <div key={idx} className="flex flex-col sm:grid sm:grid-cols-12 gap-2 sm:gap-3 p-2.5 sm:px-3 sm:py-2 items-center hover:bg-slate-50/60 transition-colors">
-                  <div className="hidden sm:block col-span-1 text-center font-bold text-xs text-slate-400">
-                    {idx + 1}
-                  </div>
-                  <div className="w-full sm:col-span-4">
-                    <Combobox
-                      placeholder="Search product..."
-                      entityName="Product"
-                      options={allProducts.map(p => ({ label: p.name, value: p.id, sublabel: `Stock: ${p.availableStock} ${p.uom}` }))}
-                      value={item.productId}
-                      onChange={(val) => {
-                        const prod = allProducts.find(p => p.id === val);
-                        const updated = [...directItems];
-                        updated[idx] = { ...updated[idx], productId: val, rate: prod ? prod.avgRate : 150 };
-                        setDirectItems(updated);
-                      }}
-                      onCreateNew={(term) => setQuickProductModal({ isOpen: true, name: term, itemIndex: idx })}
-                      createLabel="+ Create product"
-                    />
-                  </div>
-                  <div className="flex sm:contents items-center gap-2 w-full">
-                    <div className="flex-1 sm:col-span-2">
-                      <input
-                        type="number"
-                        min="0"
-                        step="any"
-                        placeholder="Qty"
-                        className="w-full text-right py-1.5 px-2.5 text-xs rounded-lg border border-slate-200 bg-white font-mono focus:outline-none focus:border-slate-900 focus:ring-1 focus:ring-slate-900"
-                        value={item.qty}
-                        onChange={(e) => {
+              {directItems.map((item, idx) => {
+                const itemErr = directGrnErrors.itemErrors?.[idx];
+                return (
+                  <div key={idx} className="flex flex-col sm:grid sm:grid-cols-12 gap-2 sm:gap-3 p-2.5 sm:px-3 sm:py-2 items-center hover:bg-slate-50/60 transition-colors">
+                    <div className="hidden sm:block col-span-1 text-center font-bold text-xs text-slate-400">
+                      {idx + 1}
+                    </div>
+                    <div className="w-full sm:col-span-4">
+                      <Combobox
+                        placeholder="Search product..."
+                        entityName="Product"
+                        error={itemErr?.productId}
+                        options={allProducts.map(p => ({ label: p.name, value: p.id, sublabel: `Stock: ${p.availableStock} ${p.uom}` }))}
+                        value={item.productId}
+                        onChange={(val) => {
+                          const prod = allProducts.find(p => p.id === val);
                           const updated = [...directItems];
-                          updated[idx].qty = e.target.value;
+                          updated[idx] = { ...updated[idx], productId: val, rate: prod ? prod.avgRate : 150 };
                           setDirectItems(updated);
                         }}
+                        onCreateNew={(term) => setQuickProductModal({ isOpen: true, name: term, itemIndex: idx })}
+                        createLabel="+ Create product"
                       />
                     </div>
-                    <div className="flex-1 sm:col-span-2">
-                      <input
-                        type="number"
-                        min="0"
-                        step="any"
-                        placeholder="Rate"
-                        className="w-full text-right py-1.5 px-2.5 text-xs rounded-lg border border-slate-200 bg-white font-mono focus:outline-none focus:border-slate-900 focus:ring-1 focus:ring-slate-900"
-                        value={item.rate}
-                        onChange={(e) => {
-                          const updated = [...directItems];
-                          updated[idx].rate = e.target.value;
-                          setDirectItems(updated);
-                        }}
-                      />
-                    </div>
-                    <div className="flex-1 sm:col-span-2">
-                      <input
-                        type="text"
-                        placeholder="Batch No"
-                        className="w-full py-1.5 px-2.5 text-xs rounded-lg border border-slate-200 bg-white font-mono focus:outline-none focus:border-slate-900 focus:ring-1 focus:ring-slate-900"
-                        value={item.batchNo}
-                        onChange={(e) => {
-                          const updated = [...directItems];
-                          updated[idx].batchNo = e.target.value;
-                          setDirectItems(updated);
-                        }}
-                      />
-                    </div>
+                    <div className="flex sm:contents items-center gap-2 w-full">
+                      <div className="flex-1 sm:col-span-2">
+                        <input
+                          type="number"
+                          min="0.01"
+                          step="any"
+                          placeholder="Qty"
+                          className={`w-full text-right py-1.5 px-2.5 text-xs rounded-lg border font-mono focus:outline-none ${
+                            itemErr?.qty
+                              ? 'border-rose-500 ring-1 ring-rose-500 bg-rose-50/20'
+                              : 'border-slate-200 bg-white focus:border-slate-900 focus:ring-1 focus:ring-slate-900'
+                          }`}
+                          value={item.qty}
+                          onChange={(e) => {
+                            const updated = [...directItems];
+                            updated[idx].qty = e.target.value;
+                            setDirectItems(updated);
+                          }}
+                        />
+                        {itemErr?.qty && <p className="text-[10px] text-rose-500 mt-0.5 text-right">{itemErr.qty}</p>}
+                      </div>
+                      <div className="flex-1 sm:col-span-2">
+                        <input
+                          type="number"
+                          min="0.01"
+                          step="any"
+                          placeholder="Rate"
+                          className={`w-full text-right py-1.5 px-2.5 text-xs rounded-lg border font-mono focus:outline-none ${
+                            itemErr?.rate
+                              ? 'border-rose-500 ring-1 ring-rose-500 bg-rose-50/20'
+                              : 'border-slate-200 bg-white focus:border-slate-900 focus:ring-1 focus:ring-slate-900'
+                          }`}
+                          value={item.rate}
+                          onChange={(e) => {
+                            const updated = [...directItems];
+                            updated[idx].rate = e.target.value;
+                            setDirectItems(updated);
+                          }}
+                        />
+                        {itemErr?.rate && <p className="text-[10px] text-rose-500 mt-0.5 text-right">{itemErr.rate}</p>}
+                      </div>
+                      <div className="flex-1 sm:col-span-2">
+                        <input
+                          type="text"
+                          placeholder="Batch No"
+                          className={`w-full py-1.5 px-2.5 text-xs rounded-lg border font-mono focus:outline-none ${
+                            itemErr?.batchNo
+                              ? 'border-rose-500 ring-1 ring-rose-500 bg-rose-50/20'
+                              : 'border-slate-200 bg-white focus:border-slate-900 focus:ring-1 focus:ring-slate-900'
+                          }`}
+                          value={item.batchNo}
+                          onChange={(e) => {
+                            const updated = [...directItems];
+                            updated[idx].batchNo = e.target.value;
+                            setDirectItems(updated);
+                          }}
+                        />
+                        {itemErr?.batchNo && <p className="text-[10px] text-rose-500 mt-0.5">{itemErr.batchNo}</p>}
+                      </div>
                     <div className="sm:col-span-1 text-center">
                       {directItems.length > 1 && (
                         <button
@@ -915,7 +1006,8 @@ export default function InventoryView({ onNavigate }) {
                     </div>
                   </div>
                 </div>
-              ))}
+              );
+            })}
             </div>
           </div>
 

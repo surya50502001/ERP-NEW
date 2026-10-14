@@ -9,6 +9,7 @@ import InventoryView from './views/InventoryView.jsx';
 import MastersView from './views/MastersView.jsx';
 import ReportsView from './views/ReportsView.jsx';
 import SettingsView from './views/SettingsView.jsx';
+import PaymentsView from './views/PaymentsView.jsx';
 import LoginView from './views/LoginView.jsx';
 import RegisterView from './views/RegisterView.jsx';
 import { ERPProvider, useERP } from './context/ERPContext.jsx';
@@ -37,6 +38,7 @@ function MainApp() {
     sales: SalesView,
     inventory: InventoryView,
     masters: MastersView,
+    payments: PaymentsView,
     reports: ReportsView,
     settings: SettingsView,
   };

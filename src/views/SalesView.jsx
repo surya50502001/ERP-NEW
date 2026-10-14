@@ -12,9 +12,10 @@ import CreditNotesTab from './sales/CreditNotesTab';
 import SalesOrdersTab from './sales/SalesOrdersTab';
 import QuickCreatePartyModal from '../components/QuickCreatePartyModal';
 import QuickCreateProductModal from '../components/QuickCreateProductModal';
+import PrintableDocumentModal from '../components/PrintableDocumentModal';
 
 export default function SalesView({ onNavigate }) {
-  const { state, createSalesInvoice, approveInvoice, rejectInvoice, addParty, addProduct, navResetCounter } = useERP();
+  const { state, createSalesInvoice, approveInvoice, rejectInvoice, addParty, addProduct, navResetCounter, showToast } = useERP();
   
   // Navigation & Sub-Tabs
   const [subTab, setSubTab] = useState('invoices'); // 'invoices' | 'payment-in' | 'credit-notes' | 'orders' | 'approvals'
@@ -26,6 +27,8 @@ export default function SalesView({ onNavigate }) {
   const [selectedInvoice, setSelectedInvoice] = useState(null);
   const [rejectionModalInv, setRejectionModalInv] = useState(null);
   const [rejectionReason, setRejectionReason] = useState('');
+  const [printableInvoice, setPrintableInvoice] = useState(null);
+  const [invErrors, setInvErrors] = useState({});
 
   // Quick Create Modals
   const [quickPartyModal, setQuickPartyModal] = useState({ isOpen: false, name: '', type: 'Customer' });
@@ -75,20 +78,20 @@ export default function SalesView({ onNavigate }) {
   });
 
   const formattedLineItems = invItems.map(item => {
-    const prod = (state.products || []).find(p => p.id === item.productId) || (state.products && state.products[0]);
-    const qty = parseFloat(item.qty || 10);
-    const rate = parseFloat(item.rate || (prod ? prod.avgRate * 1.15 : 230));
+    const prod = (state.products || []).find(p => String(p.id) === String(item.productId) || String(p.productId) === String(item.productId));
+    const qty = parseFloat(item.qty || 0);
+    const rate = parseFloat(item.rate || (prod ? Math.round((prod.avgRate || 200) * 1.15) : 0));
     return {
-      productId: item.productId || (prod ? prod.id : 'PRD-001'),
-      productName: prod ? prod.name : 'Cotton Yarn 40s Combed',
-      uom: prod ? prod.uom : 'KG',
+      productId: item.productId,
+      productName: prod ? prod.name : 'Unselected Product',
+      uom: prod ? prod.uom : 'PCS',
       qty,
       rate: Math.round(rate),
       amount: Math.round(qty * rate)
     };
   });
 
-  const subtotal = formattedLineItems.reduce((acc, i) => acc + i.amount, 0) || 5000;
+  const subtotal = formattedLineItems.reduce((acc, i) => acc + (i.amount || 0), 0);
   const taxAmount = Math.round(subtotal * (gstRate / 100));
   const grandTotal = subtotal + taxAmount;
 
@@ -97,19 +100,93 @@ export default function SalesView({ onNavigate }) {
   const pendingApprovalAmount = pendingApprovalInvoices.reduce((acc, inv) => acc + (inv.totalAmount || 0), 0);
 
   const handleCreateInvoice = async () => {
-    const customer = (state.parties || []).find(p => p.id === invCustomerId) ||
-      (state.parties && state.parties.find(p => (p.partyType || p.type) === 'Customer')) ||
-      { id: 'PTY-104', name: 'XYZ Textiles' };
+    const errors = {};
+    if (!invCustomerId) {
+      errors.customer = 'Please select a customer.';
+    }
+
+    const itemErrors = [];
+    let hasItemError = false;
+
+    if (!invItems || invItems.length === 0) {
+      errors.items = 'At least one line item is required.';
+    } else {
+      invItems.forEach((item, idx) => {
+        const itemErr = {};
+        if (!item.productId) {
+          itemErr.productId = 'Product is required';
+          hasItemError = true;
+        } else {
+          const prod = (state.products || []).find(p => String(p.id) === String(item.productId) || String(p.productId) === String(item.productId));
+          if (!prod) {
+            itemErr.productId = 'Product not found';
+            hasItemError = true;
+          } else {
+            const availStock = Number(prod.availableStock || 0);
+            const reqQty = parseFloat(item.qty || 0);
+            if (reqQty > availStock) {
+              itemErr.qty = `Exceeds stock (avail: ${availStock} ${prod.uom || 'units'})`;
+              hasItemError = true;
+            }
+          }
+        }
+
+        if (!item.qty || parseFloat(item.qty) <= 0) {
+          itemErr.qty = itemErr.qty || 'Qty must be > 0';
+          hasItemError = true;
+        }
+
+        if (item.rate === '' || item.rate === undefined || parseFloat(item.rate) <= 0) {
+          itemErr.rate = 'Rate must be > 0';
+          hasItemError = true;
+        }
+
+        itemErrors[idx] = itemErr;
+      });
+    }
+
+    if (hasItemError) errors.itemErrors = itemErrors;
+
+    if (Object.keys(errors).length > 0) {
+      setInvErrors(errors);
+      showToast?.('Validation Error', 'Please correct the highlighted errors before submitting the invoice.', 'error');
+      return;
+    }
+    setInvErrors({});
+
+    const customer = (state.parties || []).find(p => String(p.id) === String(invCustomerId) || String(p.partyId) === String(invCustomerId));
+    if (!customer) {
+      setInvErrors({ customer: 'Selected customer not found in records.' });
+      return;
+    }
+
+    const validLineItems = invItems.map(item => {
+      const prod = (state.products || []).find(p => String(p.id) === String(item.productId) || String(p.productId) === String(item.productId));
+      const qty = parseFloat(item.qty);
+      const rate = parseFloat(item.rate);
+      return {
+        productId: prod ? (prod.id || prod.productId) : item.productId,
+        productName: prod ? prod.name : 'Product',
+        uom: prod ? prod.uom : 'PCS',
+        qty,
+        rate,
+        amount: Math.round(qty * rate)
+      };
+    });
+
+    const sub = validLineItems.reduce((acc, i) => acc + i.amount, 0);
+    const tax = Math.round(sub * (gstRate / 100));
+    const total = sub + tax;
 
     await createSalesInvoice({
-      customerId: customer.id,
+      customerId: customer.id || customer.partyId,
       customerName: customer.name,
-      dueDate: invDueDate || '2026-09-05',
-      itemsCount: formattedLineItems.length,
-      subtotal,
-      tax: taxAmount,
-      totalAmount: grandTotal,
-      items: formattedLineItems,
+      dueDate: invDueDate || new Date(Date.now() + 15 * 86400000).toISOString().split('T')[0],
+      itemsCount: validLineItems.length,
+      subtotal: sub,
+      tax,
+      totalAmount: total,
+      items: validLineItems,
       status: 'Pending Approval'
     });
 
@@ -117,6 +194,7 @@ export default function SalesView({ onNavigate }) {
     setInvCustomerId('');
     setInvDueDate('');
     setInvItems([{ productId: '', qty: 10, rate: 0 }]);
+    setInvErrors({});
   };
 
   const handleSaveInlineCustomer = () => {
@@ -186,9 +264,13 @@ export default function SalesView({ onNavigate }) {
               label="Select Customer"
               placeholder="Search customer name..."
               entityName="Customer"
+              error={invErrors.customer}
               options={(state.parties || []).filter(p => (p.partyType || p.type) === 'Customer' || (p.partyType || p.type) === 'Both').map(p => ({ label: p.name, value: p.id, sublabel: p.location }))}
               value={invCustomerId}
-              onChange={(val) => setInvCustomerId(val)}
+              onChange={(val) => {
+                setInvCustomerId(val);
+                if (invErrors.customer) setInvErrors({ ...invErrors, customer: undefined });
+              }}
               onCreateNew={(term) => setQuickPartyModal({ isOpen: true, name: term, type: 'Customer' })}
               createLabel="+ Create new customer"
             />
@@ -205,6 +287,7 @@ export default function SalesView({ onNavigate }) {
               <div>
                 <h3 className="font-bold text-slate-900 text-sm">Invoice Line Items</h3>
                 <p className="text-[11px] text-slate-500">Products, quantities, and rates for this invoice</p>
+                {invErrors.items && <p className="text-xs text-rose-500 font-medium mt-1">{invErrors.items}</p>}
               </div>
               <Button
                 type="button"
@@ -232,6 +315,8 @@ export default function SalesView({ onNavigate }) {
                 const qty = parseFloat(item.qty) || 0;
                 const rate = parseFloat(item.rate) || 0;
                 const amount = Math.round(qty * rate);
+                const itemErr = invErrors.itemErrors?.[idx];
+
                 return (
                   <div key={idx} className="flex flex-col sm:grid sm:grid-cols-12 gap-2 sm:gap-3 p-2.5 sm:px-3 sm:py-2 items-center hover:bg-slate-50/60 transition-colors">
                     <div className="hidden sm:block col-span-1 text-center font-bold text-xs text-slate-400">
@@ -241,6 +326,7 @@ export default function SalesView({ onNavigate }) {
                       <Combobox
                         placeholder="Select product..."
                         entityName="Product"
+                        error={itemErr?.productId}
                         options={(state.products || []).map(p => ({ label: p.name, value: p.id, sublabel: `Stock: ${p.availableStock} ${p.uom}` }))}
                         value={item.productId}
                         onChange={(val) => {
@@ -257,10 +343,14 @@ export default function SalesView({ onNavigate }) {
                       <div className="flex-1 sm:col-span-2">
                         <input
                           type="number"
-                          min="0"
+                          min="0.01"
                           step="any"
                           placeholder="Qty"
-                          className="w-full text-right py-1.5 px-2.5 text-xs rounded-lg border border-slate-200 bg-white font-mono focus:outline-none focus:border-slate-900 focus:ring-1 focus:ring-slate-900"
+                          className={`w-full text-right py-1.5 px-2.5 text-xs rounded-lg border font-mono focus:outline-none ${
+                            itemErr?.qty
+                              ? 'border-rose-500 ring-1 ring-rose-500 bg-rose-50/20'
+                              : 'border-slate-200 bg-white focus:border-slate-900 focus:ring-1 focus:ring-slate-900'
+                          }`}
                           value={item.qty}
                           onChange={(e) => {
                             const updated = [...invItems];
@@ -268,14 +358,19 @@ export default function SalesView({ onNavigate }) {
                             setInvItems(updated);
                           }}
                         />
+                        {itemErr?.qty && <p className="text-[10px] text-rose-500 mt-0.5 text-right">{itemErr.qty}</p>}
                       </div>
                       <div className="flex-1 sm:col-span-2">
                         <input
                           type="number"
-                          min="0"
+                          min="0.01"
                           step="any"
                           placeholder="Rate"
-                          className="w-full text-right py-1.5 px-2.5 text-xs rounded-lg border border-slate-200 bg-white font-mono focus:outline-none focus:border-slate-900 focus:ring-1 focus:ring-slate-900"
+                          className={`w-full text-right py-1.5 px-2.5 text-xs rounded-lg border font-mono focus:outline-none ${
+                            itemErr?.rate
+                              ? 'border-rose-500 ring-1 ring-rose-500 bg-rose-50/20'
+                              : 'border-slate-200 bg-white focus:border-slate-900 focus:ring-1 focus:ring-slate-900'
+                          }`}
                           value={item.rate}
                           onChange={(e) => {
                             const updated = [...invItems];
@@ -283,6 +378,7 @@ export default function SalesView({ onNavigate }) {
                             setInvItems(updated);
                           }}
                         />
+                        {itemErr?.rate && <p className="text-[10px] text-rose-500 mt-0.5 text-right">{itemErr.rate}</p>}
                       </div>
                       <div className="flex-1 sm:col-span-1 text-right">
                         <span className="font-mono font-bold text-xs text-slate-800">₹{amount.toLocaleString('en-IN')}</span>
@@ -546,16 +642,26 @@ export default function SalesView({ onNavigate }) {
                         <td className="py-3 px-4 text-center">
                           <StatusBadge status={inv.status} />
                         </td>
-                        <td className="py-3 px-4 text-right space-x-2">
-                          <Button size="sm" variant="secondary" onClick={() => setSelectedInvoice(inv)}>
-                            <Icon name="Eye" className="w-3.5 h-3.5 mr-1" />
-                            Details
-                          </Button>
-                          {inv.status === 'Pending Approval' && (
-                            <Button size="sm" variant="accent" onClick={() => setSubTab('approvals')}>
-                              Review
+                        <td className="py-3 px-4 text-right">
+                          <div className="flex items-center justify-end gap-1" onClick={(e) => e.stopPropagation()}>
+                            <button
+                              type="button"
+                              onClick={() => setPrintableInvoice(inv)}
+                              className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors cursor-pointer"
+                              title="Print GST Tax Invoice"
+                            >
+                              <Icon name="Printer" className="w-4 h-4" />
+                            </button>
+                            <Button size="sm" variant="secondary" onClick={() => setSelectedInvoice(inv)}>
+                              <Icon name="Eye" className="w-3.5 h-3.5 mr-1" />
+                              Details
                             </Button>
-                          )}
+                            {inv.status === 'Pending Approval' && (
+                              <Button size="sm" variant="accent" onClick={() => setSubTab('approvals')}>
+                                Review
+                              </Button>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     );
@@ -745,7 +851,14 @@ export default function SalesView({ onNavigate }) {
         subtitle={selectedInvoice ? `Customer: ${selectedInvoice.customerName} • Status: ${selectedInvoice.status}` : ''}
         footer={
           <div className="flex items-center justify-between w-full">
-            <Button variant="secondary" size="md" onClick={() => setSelectedInvoice(null)}>Close</Button>
+            <div className="flex items-center gap-2">
+              <Button variant="secondary" size="md" onClick={() => setSelectedInvoice(null)}>Close</Button>
+              {selectedInvoice && (
+                <Button variant="secondary" size="md" onClick={() => setPrintableInvoice(selectedInvoice)}>
+                  <Icon name="Printer" className="w-4 h-4 mr-1" /> Print / PDF
+                </Button>
+              )}
+            </div>
             {selectedInvoice && selectedInvoice.status === 'Pending Approval' && (
               <Button
                 variant="accent"
@@ -855,6 +968,15 @@ export default function SalesView({ onNavigate }) {
             </div>
           </div>
         </div>
+      )}
+
+      {printableInvoice && (
+        <PrintableDocumentModal
+          isOpen={Boolean(printableInvoice)}
+          onClose={() => setPrintableInvoice(null)}
+          docType="TAX_INVOICE"
+          data={printableInvoice}
+        />
       )}
     </div>
   );
