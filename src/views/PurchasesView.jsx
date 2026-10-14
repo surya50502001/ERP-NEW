@@ -7,9 +7,15 @@ import Combobox from '../components/Combobox';
 import Drawer from '../components/Drawer';
 import StatusBadge from '../components/StatusBadge';
 import { useERP } from '../context/ERPContext';
+import PurchaseBillsTab from './purchases/PurchaseBillsTab';
+import PaymentOutTab from './purchases/PaymentOutTab';
+import DebitNotesTab from './purchases/DebitNotesTab';
+import QuickCreatePartyModal from '../components/QuickCreatePartyModal';
+import QuickCreateProductModal from '../components/QuickCreateProductModal';
 
 export default function PurchasesView({ onNavigate }) {
   const { state, createPurchaseOrder, receiveGoods, addProduct, addParty, navResetCounter } = useERP();
+  const [subTab, setSubTab] = useState('orders'); // 'orders' | 'bills' | 'payment-out' | 'debit-notes'
   const [selectedPO, setSelectedPO] = useState(null);
   const [statusFilter, setStatusFilter] = useState('All');
   const [searchQuery, setSearchQuery] = useState('');
@@ -19,6 +25,10 @@ export default function PurchasesView({ onNavigate }) {
   const [isGRNDrawerOpen, setIsGRNDrawerOpen] = useState(false);
   const [isCreateProductOpen, setIsCreateProductOpen] = useState(false);
   const [isCreatePartyOpen, setIsCreatePartyOpen] = useState(false);
+
+  // Quick Create Modals
+  const [quickPartyModal, setQuickPartyModal] = useState({ isOpen: false, name: '', type: 'Supplier' });
+  const [quickProductModal, setQuickProductModal] = useState({ isOpen: false, name: '', itemIndex: null });
 
   const [poSupplierId, setPoSupplierId] = useState('');
   const [poExpectedDate, setPoExpectedDate] = useState('');
@@ -39,6 +49,7 @@ export default function PurchasesView({ onNavigate }) {
 
   // Reset view to main list when user re-clicks sidebar
   useEffect(() => {
+    setSubTab('orders');
     setIsNewPOFormOpen(false);
     setSelectedPO(null);
     setIsGRNDrawerOpen(false);
@@ -214,6 +225,7 @@ export default function PurchasesView({ onNavigate }) {
             <Combobox
               label="Select Supplier"
               placeholder="Search supplier..."
+              entityName="Supplier"
               options={(state.parties || []).filter(p => (p.partyType || p.type) === 'Supplier' || (p.partyType || p.type) === 'Both').map(p => ({
                 label: p.name || 'Unnamed Supplier',
                 value: p.id ?? p.partyId,
@@ -221,8 +233,8 @@ export default function PurchasesView({ onNavigate }) {
               }))}
               value={poSupplierId}
               onChange={(val) => setPoSupplierId(val)}
-              onCreateNew={() => setIsCreatePartyOpen(true)}
-              createLabel="+ Create new supplier inline"
+              onCreateNew={(term) => setQuickPartyModal({ isOpen: true, name: term, type: 'Supplier' })}
+              createLabel="+ Create new supplier"
             />
 
             <Input
@@ -233,26 +245,13 @@ export default function PurchasesView({ onNavigate }) {
             />
           </div>
 
-          {/* Inline Supplier Form */}
-          {isCreatePartyOpen && (
-            <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-3">
-              <h4 className="font-bold text-slate-900 text-xs flex items-center justify-between">
-                <span>Quick Add Supplier</span>
-                <button onClick={() => setIsCreatePartyOpen(false)} className="text-slate-400 hover:text-slate-700">✕</button>
-              </h4>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                <Input label="Supplier Name" value={newPartyName} onChange={(e) => setNewPartyName(e.target.value)} />
-                <Select label="Party Type" options={['Supplier', 'Both']} value={newPartyType} onChange={(e) => setNewPartyType(e.target.value)} />
-                <Input label="Phone" value={newPartyPhone} onChange={(e) => setNewPartyPhone(e.target.value)} />
-              </div>
-              <Button size="sm" variant="primary" onClick={handleInlineSaveParty}>Save Supplier</Button>
-            </div>
-          )}
-
           {/* Line Items */}
-          <div className="space-y-4 pt-4 border-t border-slate-100">
+          <div className="space-y-3 pt-4 border-t border-slate-100">
             <div className="flex items-center justify-between">
-              <h3 className="font-bold text-slate-900 text-sm">Order Line Items</h3>
+              <div>
+                <h3 className="font-bold text-slate-900 text-sm">Order Line Items</h3>
+                <p className="text-[11px] text-slate-500">Products, quantities, and rates for this purchase order</p>
+              </div>
               <Button
                 type="button"
                 variant="secondary"
@@ -263,90 +262,142 @@ export default function PurchasesView({ onNavigate }) {
               </Button>
             </div>
 
-            {poItems.map((item, idx) => (
-              <div key={idx} className="p-4 rounded-xl border border-slate-200 bg-slate-50/50 space-y-3">
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-xs font-semibold text-slate-500">Item #{idx + 1}</span>
-                  {poItems.length > 1 && (
-                    <button
-                      type="button"
-                      onClick={() => setPoItems(poItems.filter((_, i) => i !== idx))}
-                      className="text-xs text-red-500 hover:text-red-700 font-semibold flex items-center gap-1 px-2 py-1 rounded-lg hover:bg-red-50 transition-colors"
-                    >
-                      <Icon name="Trash2" className="w-3.5 h-3.5" /> Remove
-                    </button>
-                  )}
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                  <Combobox
-                    label="Product"
-                    placeholder="Select product..."
-                    options={(state.products || []).map(p => ({
-                      label: p.name || 'Unnamed Product',
-                      value: p.id ?? p.productId,
-                      sublabel: `Stock: ${p.availableStock ?? 0} ${p.uom || 'KG'}`
-                    }))}
-                    value={item.productId}
-                    onChange={(val) => {
-                      const prod = (state.products || []).find(p => String(p.id) === String(val) || String(p.productId) === String(val));
-                      const updated = [...poItems];
-                      updated[idx] = {
-                        ...updated[idx],
-                        productId: val,
-                        rate: prod ? (prod.avgRate || prod.purchaseRate || 200) : 200
-                      };
-                      setPoItems(updated);
-                    }}
-                    onCreateNew={() => setIsCreateProductOpen(true)}
-                    createLabel="+ Create product inline"
-                  />
-
-                  <Input
-                    label="Qty"
-                    type="number"
-                    value={item.qty}
-                    onChange={(e) => {
-                      const updated = [...poItems];
-                      updated[idx].qty = e.target.value;
-                      setPoItems(updated);
-                    }}
-                  />
-                  <Input
-                    label="Rate (₹)"
-                    type="number"
-                    value={item.rate}
-                    onChange={(e) => {
-                      const updated = [...poItems];
-                      updated[idx].rate = e.target.value;
-                      setPoItems(updated);
-                    }}
-                  />
-                </div>
+            <div className="border border-slate-200 rounded-xl bg-white shadow-2xs divide-y divide-slate-100 overflow-visible">
+              {/* Header Row */}
+              <div className="hidden sm:grid grid-cols-12 gap-3 px-3 py-2 bg-slate-50/80 rounded-t-xl text-[11px] font-bold text-slate-500 uppercase tracking-wider items-center">
+                <div className="col-span-1 text-center">#</div>
+                <div className="col-span-5">Product / Item</div>
+                <div className="col-span-2 text-right">Qty</div>
+                <div className="col-span-2 text-right">Rate (₹)</div>
+                <div className="col-span-1 text-right">Amount</div>
+                <div className="col-span-1 text-center"></div>
               </div>
-            ))}
-          </div>
 
-          {/* Inline Product Form */}
-          {isCreateProductOpen && (
-            <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-3">
-              <h4 className="font-bold text-slate-900 text-xs flex items-center justify-between">
-                <span>Quick Add Product</span>
-                <button onClick={() => setIsCreateProductOpen(false)} className="text-slate-400 hover:text-slate-700">✕</button>
-              </h4>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                <Input label="Product Name" value={newProdName} onChange={(e) => setNewProdName(e.target.value)} />
-                <Select label="UOM" options={['KG', 'MTR', 'PCS']} value={newProdUom} onChange={(e) => setNewProdUom(e.target.value)} />
-                <Input label="Standard Rate (₹)" type="number" value={newProdRate} onChange={(e) => setNewProdRate(e.target.value)} />
-              </div>
-              <Button size="sm" variant="primary" onClick={handleInlineSaveProduct}>Save Product</Button>
+              {/* Item Rows */}
+              {poItems.map((item, idx) => {
+                const qty = parseFloat(item.qty) || 0;
+                const rate = parseFloat(item.rate) || 0;
+                const amount = Math.round(qty * rate);
+                return (
+                  <div key={idx} className="flex flex-col sm:grid sm:grid-cols-12 gap-2 sm:gap-3 p-2.5 sm:px-3 sm:py-2 items-center hover:bg-slate-50/60 transition-colors">
+                    <div className="hidden sm:block col-span-1 text-center font-bold text-xs text-slate-400">
+                      {idx + 1}
+                    </div>
+                    <div className="w-full sm:col-span-5">
+                      <Combobox
+                        placeholder="Select product..."
+                        entityName="Product"
+                        options={(state.products || []).map(p => ({
+                          label: p.name || 'Unnamed Product',
+                          value: p.id ?? p.productId,
+                          sublabel: `Stock: ${p.availableStock ?? 0} ${p.uom || 'KG'}`
+                        }))}
+                        value={item.productId}
+                        onChange={(val) => {
+                          const prod = (state.products || []).find(p => String(p.id) === String(val) || String(p.productId) === String(val));
+                          const updated = [...poItems];
+                          updated[idx] = {
+                            ...updated[idx],
+                            productId: val,
+                            rate: prod ? (prod.avgRate || prod.purchaseRate || 200) : 200
+                          };
+                          setPoItems(updated);
+                        }}
+                        onCreateNew={(term) => setQuickProductModal({ isOpen: true, name: term, itemIndex: idx })}
+                        createLabel="+ Create product"
+                      />
+                    </div>
+                    <div className="flex sm:contents items-center gap-2 w-full">
+                      <div className="flex-1 sm:col-span-2">
+                        <input
+                          type="number"
+                          min="0"
+                          step="any"
+                          placeholder="Qty"
+                          className="w-full text-right py-1.5 px-2.5 text-xs rounded-lg border border-slate-200 bg-white font-mono focus:outline-none focus:border-slate-900 focus:ring-1 focus:ring-slate-900"
+                          value={item.qty}
+                          onChange={(e) => {
+                            const updated = [...poItems];
+                            updated[idx].qty = e.target.value;
+                            setPoItems(updated);
+                          }}
+                        />
+                      </div>
+                      <div className="flex-1 sm:col-span-2">
+                        <input
+                          type="number"
+                          min="0"
+                          step="any"
+                          placeholder="Rate"
+                          className="w-full text-right py-1.5 px-2.5 text-xs rounded-lg border border-slate-200 bg-white font-mono focus:outline-none focus:border-slate-900 focus:ring-1 focus:ring-slate-900"
+                          value={item.rate}
+                          onChange={(e) => {
+                            const updated = [...poItems];
+                            updated[idx].rate = e.target.value;
+                            setPoItems(updated);
+                          }}
+                        />
+                      </div>
+                      <div className="flex-1 sm:col-span-1 text-right">
+                        <span className="font-mono font-bold text-xs text-slate-800">₹{amount.toLocaleString('en-IN')}</span>
+                      </div>
+                      <div className="sm:col-span-1 text-center">
+                        {poItems.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => setPoItems(poItems.filter((_, i) => i !== idx))}
+                            className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-md transition-colors cursor-pointer"
+                            title="Remove item"
+                          >
+                            <Icon name="Trash2" className="w-4 h-4" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
-          )}
+          </div>
 
           <div className="flex justify-end gap-2 pt-4">
             <Button variant="secondary" size="md" onClick={() => setIsNewPOFormOpen(false)}>Cancel</Button>
             <Button variant="primary" size="md" onClick={handleSavePO}>Generate PO</Button>
           </div>
         </div>
+
+        {/* Quick Create Modals */}
+        <QuickCreatePartyModal
+          isOpen={quickPartyModal.isOpen}
+          onClose={() => setQuickPartyModal({ isOpen: false, name: '', type: 'Supplier' })}
+          defaultType="Supplier"
+          initialName={quickPartyModal.name}
+          onCreated={(newParty) => {
+            const pid = newParty.id || newParty.partyId;
+            setPoSupplierId(pid);
+          }}
+        />
+
+        <QuickCreateProductModal
+          isOpen={quickProductModal.isOpen}
+          onClose={() => setQuickProductModal({ isOpen: false, name: '', itemIndex: null })}
+          initialName={quickProductModal.name}
+          onCreated={(newProd) => {
+            if (quickProductModal.itemIndex !== null && quickProductModal.itemIndex !== undefined) {
+              const idx = quickProductModal.itemIndex;
+              const pid = newProd.id || newProd.productId;
+              const updated = [...poItems];
+              if (updated[idx]) {
+                updated[idx] = {
+                  ...updated[idx],
+                  productId: pid,
+                  rate: newProd.purchaseRate || newProd.avgRate || 200
+                };
+                setPoItems(updated);
+              }
+            }
+          }}
+        />
       </div>
     );
   }
@@ -563,35 +614,54 @@ export default function PurchasesView({ onNavigate }) {
               Entering received quantities will automatically generate a new GRN log, create FIFO batch entries, and update product available stock in real time.
             </div>
 
-            {(currentPO.items || []).map((item, idx) => {
-              const itemKey = item.productId || item.id || idx;
-              const prod = (state.products || []).find(p => String(p.id) === String(item.productId) || String(p.productId) === String(item.productId));
-              const prodName = item.productName || (prod ? prod.name : `Product #${item.productId}`);
-              const uom = item.uom || (prod ? prod.uom : 'KG');
-              const remaining = Math.max(0, (item.qty || 0) - (item.receivedQty || 0));
+            <div className="border border-slate-200 rounded-xl bg-white shadow-2xs divide-y divide-slate-100 overflow-visible">
+              <div className="hidden sm:grid grid-cols-12 gap-3 px-3 py-2 bg-slate-50/80 rounded-t-xl text-[11px] font-bold text-slate-500 uppercase tracking-wider border-b border-slate-200">
+                <div className="col-span-5">Product / Item</div>
+                <div className="col-span-2 text-right">Ordered</div>
+                <div className="col-span-2 text-right">Receive Qty</div>
+                <div className="col-span-3">Batch Number</div>
+              </div>
 
-              return (
-                <div key={itemKey} className="p-4 rounded-xl border border-slate-200 bg-white space-y-3 shadow-2xs">
-                  <div className="flex justify-between font-bold text-slate-900">
-                    <span>{prodName}</span>
-                    <span className="text-slate-500 font-mono text-[11px]">Ordered: {item.qty || 0} {uom}</span>
+              {(currentPO.items || []).map((item, idx) => {
+                const itemKey = item.productId || item.id || idx;
+                const prod = (state.products || []).find(p => String(p.id) === String(item.productId) || String(p.productId) === String(item.productId));
+                const prodName = item.productName || (prod ? prod.name : `Product #${item.productId}`);
+                const uom = item.uom || (prod ? prod.uom : 'KG');
+                const remaining = Math.max(0, (item.qty || 0) - (item.receivedQty || 0));
+
+                return (
+                  <div key={itemKey} className="flex flex-col sm:grid sm:grid-cols-12 gap-2 sm:gap-3 p-2.5 sm:px-3 sm:py-2 items-center hover:bg-slate-50/60 transition-colors">
+                    <div className="w-full sm:col-span-5">
+                      <span className="font-bold text-slate-800 text-xs block truncate">{prodName}</span>
+                      <span className="sm:hidden text-[10px] text-slate-400 font-mono">Ordered: {item.qty || 0} {uom}</span>
+                    </div>
+                    <div className="hidden sm:block sm:col-span-2 text-right text-xs text-slate-500 font-mono">
+                      {item.qty || 0} {uom}
+                    </div>
+                    <div className="w-full sm:col-span-2">
+                      <input
+                        type="number"
+                        min="0"
+                        step="any"
+                        placeholder="Qty"
+                        className="w-full text-right py-1.5 px-2.5 text-xs rounded-lg border border-slate-200 bg-white font-mono focus:outline-none focus:border-slate-900 focus:ring-1 focus:ring-slate-900"
+                        value={grnReceivedQtyMap[itemKey] ?? remaining}
+                        onChange={(e) => setGrnReceivedQtyMap({ ...grnReceivedQtyMap, [itemKey]: e.target.value })}
+                      />
+                    </div>
+                    <div className="w-full sm:col-span-3">
+                      <input
+                        type="text"
+                        placeholder="Batch Number"
+                        className="w-full py-1.5 px-2.5 text-xs rounded-lg border border-slate-200 bg-white font-mono focus:outline-none focus:border-slate-900 focus:ring-1 focus:ring-slate-900"
+                        value={grnBatchNoMap[itemKey] || 'B001'}
+                        onChange={(e) => setGrnBatchNoMap({ ...grnBatchNoMap, [itemKey]: e.target.value })}
+                      />
+                    </div>
                   </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <Input
-                      label="Received Qty"
-                      type="number"
-                      value={grnReceivedQtyMap[itemKey] ?? remaining}
-                      onChange={(e) => setGrnReceivedQtyMap({ ...grnReceivedQtyMap, [itemKey]: e.target.value })}
-                    />
-                    <Input
-                      label="Batch Number"
-                      value={grnBatchNoMap[itemKey] || 'B001'}
-                      onChange={(e) => setGrnBatchNoMap({ ...grnBatchNoMap, [itemKey]: e.target.value })}
-                    />
-                  </div>
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
 
             <Input
               label="GRN Remarks / Delivery Note"
@@ -607,16 +677,48 @@ export default function PurchasesView({ onNavigate }) {
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-slate-200">
-        <div>
-          <h1 className="text-xl font-bold text-slate-900 tracking-tight">Purchases</h1>
-          <p className="text-xs text-slate-500 mt-0.5">Manage Purchase Orders, GRNs, and Supplier Transactions</p>
-        </div>
-        <Button variant="primary" size="md" onClick={() => setIsNewPOFormOpen(true)}>
-          <Icon name="Plus" className="w-4 h-4" />
-          New Purchase Order
-        </Button>
+      {/* Module Sub-tabs Header */}
+      <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 pb-3">
+        {[
+          { id: 'orders', label: 'Purchase Orders', icon: 'ShoppingBag' },
+          { id: 'bills', label: 'Purchase Bills', icon: 'FileText' },
+          { id: 'payment-out', label: 'Payment - Out', icon: 'CreditCard' },
+          { id: 'debit-notes', label: 'Purchase Return (Debit Note)', icon: 'ArrowLeft' },
+        ].map((tab) => (
+          <button
+            key={tab.id}
+            onClick={() => {
+              setSubTab(tab.id);
+              setSelectedPO(null);
+            }}
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+              subTab === tab.id
+                ? 'bg-slate-900 text-white shadow-xs'
+                : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200/80 hover:text-slate-900'
+            }`}
+          >
+            <Icon name={tab.icon} className="w-3.5 h-3.5" />
+            {tab.label}
+          </button>
+        ))}
       </div>
+
+      {subTab === 'bills' && <PurchaseBillsTab onNavigate={onNavigate} />}
+      {subTab === 'payment-out' && <PaymentOutTab onNavigate={onNavigate} />}
+      {subTab === 'debit-notes' && <DebitNotesTab onNavigate={onNavigate} />}
+
+      {subTab === 'orders' && (
+        <div className="space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-slate-200">
+            <div>
+              <h1 className="text-xl font-bold text-slate-900 tracking-tight">Purchase Orders</h1>
+              <p className="text-xs text-slate-500 mt-0.5">Manage Purchase Orders, GRNs, and Supplier Transactions</p>
+            </div>
+            <Button variant="primary" size="md" onClick={() => setIsNewPOFormOpen(true)}>
+              <Icon name="Plus" className="w-4 h-4" />
+              New Purchase Order
+            </Button>
+          </div>
 
       {/* KPI Metrics Summary Row */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
@@ -722,6 +824,8 @@ export default function PurchasesView({ onNavigate }) {
         </table>
       </div>
     </div>
+    )}
+  </div>
   );
 }
 

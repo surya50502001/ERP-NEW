@@ -7,12 +7,17 @@ import Combobox from '../components/Combobox';
 import Drawer from '../components/Drawer';
 import StatusBadge from '../components/StatusBadge';
 import { useERP } from '../context/ERPContext';
+import PaymentInTab from './sales/PaymentInTab';
+import CreditNotesTab from './sales/CreditNotesTab';
+import SalesOrdersTab from './sales/SalesOrdersTab';
+import QuickCreatePartyModal from '../components/QuickCreatePartyModal';
+import QuickCreateProductModal from '../components/QuickCreateProductModal';
 
 export default function SalesView({ onNavigate }) {
   const { state, createSalesInvoice, approveInvoice, rejectInvoice, addParty, addProduct, navResetCounter } = useERP();
   
   // Navigation & Sub-Tabs
-  const [subTab, setSubTab] = useState('invoices'); // 'invoices' | 'approvals'
+  const [subTab, setSubTab] = useState('invoices'); // 'invoices' | 'payment-in' | 'credit-notes' | 'orders' | 'approvals'
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('All');
   
@@ -21,6 +26,10 @@ export default function SalesView({ onNavigate }) {
   const [selectedInvoice, setSelectedInvoice] = useState(null);
   const [rejectionModalInv, setRejectionModalInv] = useState(null);
   const [rejectionReason, setRejectionReason] = useState('');
+
+  // Quick Create Modals
+  const [quickPartyModal, setQuickPartyModal] = useState({ isOpen: false, name: '', type: 'Customer' });
+  const [quickProductModal, setQuickProductModal] = useState({ isOpen: false, name: '', itemIndex: null });
 
   // Form states for New Invoice
   const [invCustomerId, setInvCustomerId] = useState('');
@@ -176,11 +185,12 @@ export default function SalesView({ onNavigate }) {
             <Combobox
               label="Select Customer"
               placeholder="Search customer name..."
+              entityName="Customer"
               options={(state.parties || []).filter(p => (p.partyType || p.type) === 'Customer' || (p.partyType || p.type) === 'Both').map(p => ({ label: p.name, value: p.id, sublabel: p.location }))}
               value={invCustomerId}
               onChange={(val) => setInvCustomerId(val)}
-              onCreateNew={() => setIsCreateCustomerOpen(true)}
-              createLabel="+ Create new customer inline"
+              onCreateNew={(term) => setQuickPartyModal({ isOpen: true, name: term, type: 'Customer' })}
+              createLabel="+ Create new customer"
             />
             <Input
               label="Payment Due Date"
@@ -190,24 +200,12 @@ export default function SalesView({ onNavigate }) {
             />
           </div>
 
-          {isCreateCustomerOpen && (
-            <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-3">
-              <h4 className="font-bold text-slate-900 text-xs flex items-center justify-between">
-                <span>Quick Add New Customer</span>
-                <button onClick={() => setIsCreateCustomerOpen(false)} className="text-slate-400 hover:text-slate-700">✕</button>
-              </h4>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                <Input label="Customer Name" value={custName} onChange={(e) => setCustName(e.target.value)} />
-                <Input label="Phone" value={custPhone} onChange={(e) => setCustPhone(e.target.value)} />
-                <Select label="State" options={['Tamil Nadu', 'Gujarat', 'Maharashtra', 'Karnataka', 'Punjab']} value={custState} onChange={(e) => setCustState(e.target.value)} />
-              </div>
-              <Button size="sm" variant="primary" onClick={handleSaveInlineCustomer}>Save Customer</Button>
-            </div>
-          )}
-
-          <div className="space-y-4 pt-4 border-t border-slate-100">
+          <div className="space-y-3 pt-4 border-t border-slate-100">
             <div className="flex items-center justify-between">
-              <h3 className="font-bold text-slate-900 text-sm">Invoice Line Items</h3>
+              <div>
+                <h3 className="font-bold text-slate-900 text-sm">Invoice Line Items</h3>
+                <p className="text-[11px] text-slate-500">Products, quantities, and rates for this invoice</p>
+              </div>
               <Button
                 type="button"
                 variant="secondary"
@@ -218,64 +216,95 @@ export default function SalesView({ onNavigate }) {
               </Button>
             </div>
 
-            {invItems.map((item, idx) => (
-              <div key={idx} className="p-4 rounded-xl border border-slate-200 bg-slate-50/50 space-y-3">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                  <div className="md:col-span-1">
-                    <Combobox
-                      label={`Product #${idx + 1}`}
-                      placeholder="Search product..."
-                      options={(state.products || []).map(p => ({ label: p.name, value: p.id, sublabel: `Stock: ${p.availableStock} ${p.uom}` }))}
-                      value={item.productId}
-                      onChange={(val) => {
-                        const prod = (state.products || []).find(p => p.id === val);
-                        const updated = [...invItems];
-                        updated[idx] = { ...updated[idx], productId: val, rate: prod ? Math.round(prod.avgRate * 1.15) : 250 };
-                        setInvItems(updated);
-                      }}
-                      onCreateNew={() => setIsCreateProductOpen(true)}
-                      createLabel="+ Create product inline"
-                    />
-                  </div>
-                  <Input
-                    label="Qty"
-                    type="number"
-                    value={item.qty}
-                    onChange={(e) => {
-                      const updated = [...invItems];
-                      updated[idx].qty = e.target.value;
-                      setInvItems(updated);
-                    }}
-                  />
-                  <Input
-                    label="Selling Rate (₹)"
-                    type="number"
-                    value={item.rate}
-                    onChange={(e) => {
-                      const updated = [...invItems];
-                      updated[idx].rate = e.target.value;
-                      setInvItems(updated);
-                    }}
-                  />
-                </div>
+            <div className="border border-slate-200 rounded-xl bg-white shadow-2xs divide-y divide-slate-100 overflow-visible">
+              {/* Header Row */}
+              <div className="hidden sm:grid grid-cols-12 gap-3 px-3 py-2 bg-slate-50/80 rounded-t-xl text-[11px] font-bold text-slate-500 uppercase tracking-wider items-center">
+                <div className="col-span-1 text-center">#</div>
+                <div className="col-span-5">Product / Item</div>
+                <div className="col-span-2 text-right">Qty</div>
+                <div className="col-span-2 text-right">Rate (₹)</div>
+                <div className="col-span-1 text-right">Amount</div>
+                <div className="col-span-1 text-center"></div>
               </div>
-            ))}
-          </div>
 
-          {isCreateProductOpen && (
-            <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-3">
-              <h4 className="font-bold text-slate-900 text-xs flex items-center justify-between">
-                <span>Quick Add Product</span>
-                <button onClick={() => setIsCreateProductOpen(false)} className="text-slate-400 hover:text-slate-700">✕</button>
-              </h4>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                <Input label="Product Name" value={prodName} onChange={(e) => setProdName(e.target.value)} />
-                <Select label="UOM" options={['KG', 'MTR', 'PCS']} value={prodUom} onChange={(e) => setProdUom(e.target.value)} />
-                <Input label="Selling Rate (₹)" type="number" value={prodRate} onChange={(e) => setProdRate(e.target.value)} />
-              </div>
-              <Button size="sm" variant="primary" onClick={handleSaveInlineProduct}>Save Product</Button>
+              {/* Item Rows */}
+              {invItems.map((item, idx) => {
+                const qty = parseFloat(item.qty) || 0;
+                const rate = parseFloat(item.rate) || 0;
+                const amount = Math.round(qty * rate);
+                return (
+                  <div key={idx} className="flex flex-col sm:grid sm:grid-cols-12 gap-2 sm:gap-3 p-2.5 sm:px-3 sm:py-2 items-center hover:bg-slate-50/60 transition-colors">
+                    <div className="hidden sm:block col-span-1 text-center font-bold text-xs text-slate-400">
+                      {idx + 1}
+                    </div>
+                    <div className="w-full sm:col-span-5">
+                      <Combobox
+                        placeholder="Select product..."
+                        entityName="Product"
+                        options={(state.products || []).map(p => ({ label: p.name, value: p.id, sublabel: `Stock: ${p.availableStock} ${p.uom}` }))}
+                        value={item.productId}
+                        onChange={(val) => {
+                          const prod = (state.products || []).find(p => p.id === val);
+                          const updated = [...invItems];
+                          updated[idx] = { ...updated[idx], productId: val, rate: prod ? Math.round(prod.avgRate * 1.15) : 250 };
+                          setInvItems(updated);
+                        }}
+                        onCreateNew={(term) => setQuickProductModal({ isOpen: true, name: term, itemIndex: idx })}
+                        createLabel="+ Create product"
+                      />
+                    </div>
+                    <div className="flex sm:contents items-center gap-2 w-full">
+                      <div className="flex-1 sm:col-span-2">
+                        <input
+                          type="number"
+                          min="0"
+                          step="any"
+                          placeholder="Qty"
+                          className="w-full text-right py-1.5 px-2.5 text-xs rounded-lg border border-slate-200 bg-white font-mono focus:outline-none focus:border-slate-900 focus:ring-1 focus:ring-slate-900"
+                          value={item.qty}
+                          onChange={(e) => {
+                            const updated = [...invItems];
+                            updated[idx].qty = e.target.value;
+                            setInvItems(updated);
+                          }}
+                        />
+                      </div>
+                      <div className="flex-1 sm:col-span-2">
+                        <input
+                          type="number"
+                          min="0"
+                          step="any"
+                          placeholder="Rate"
+                          className="w-full text-right py-1.5 px-2.5 text-xs rounded-lg border border-slate-200 bg-white font-mono focus:outline-none focus:border-slate-900 focus:ring-1 focus:ring-slate-900"
+                          value={item.rate}
+                          onChange={(e) => {
+                            const updated = [...invItems];
+                            updated[idx].rate = e.target.value;
+                            setInvItems(updated);
+                          }}
+                        />
+                      </div>
+                      <div className="flex-1 sm:col-span-1 text-right">
+                        <span className="font-mono font-bold text-xs text-slate-800">₹{amount.toLocaleString('en-IN')}</span>
+                      </div>
+                      <div className="sm:col-span-1 text-center">
+                        {invItems.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => setInvItems(invItems.filter((_, i) => i !== idx))}
+                            className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-md transition-colors cursor-pointer"
+                            title="Remove item"
+                          >
+                            <Icon name="Trash2" className="w-4 h-4" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
-          )}
+          </div>
 
           <div className="p-5 rounded-xl bg-slate-900 text-white space-y-3">
             <div className="flex justify-between text-slate-300 text-xs">
@@ -297,6 +326,39 @@ export default function SalesView({ onNavigate }) {
             </div>
           </div>
         </div>
+
+        {/* Quick Create Modals */}
+        <QuickCreatePartyModal
+          isOpen={quickPartyModal.isOpen}
+          onClose={() => setQuickPartyModal({ isOpen: false, name: '', type: 'Customer' })}
+          defaultType="Customer"
+          initialName={quickPartyModal.name}
+          onCreated={(newParty) => {
+            const pid = newParty.id || newParty.partyId;
+            setInvCustomerId(pid);
+          }}
+        />
+
+        <QuickCreateProductModal
+          isOpen={quickProductModal.isOpen}
+          onClose={() => setQuickProductModal({ isOpen: false, name: '', itemIndex: null })}
+          initialName={quickProductModal.name}
+          onCreated={(newProd) => {
+            if (quickProductModal.itemIndex !== null && quickProductModal.itemIndex !== undefined) {
+              const idx = quickProductModal.itemIndex;
+              const pid = newProd.id || newProd.productId;
+              const updated = [...invItems];
+              if (updated[idx]) {
+                updated[idx] = {
+                  ...updated[idx],
+                  productId: pid,
+                  rate: Math.round((newProd.avgRate || 250) * 1.15)
+                };
+                setInvItems(updated);
+              }
+            }
+          }}
+        />
       </div>
     );
   }
@@ -310,53 +372,54 @@ export default function SalesView({ onNavigate }) {
           <p className="text-xs text-slate-500 mt-0.5">Manage Sales Invoices, Multi-tier Approvals, and Customer Billing</p>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="primary" size="md" onClick={() => setIsNewInvoiceOpen(true)}>
-            <Icon name="Plus" className="w-4 h-4" />
-            New Sales Invoice
-          </Button>
+          {subTab === 'invoices' && (
+            <Button variant="primary" size="md" onClick={() => setIsNewInvoiceOpen(true)}>
+              <Icon name="Plus" className="w-4 h-4" />
+              New Sales Invoice
+            </Button>
+          )}
         </div>
       </div>
 
       {/* Sub-Tab Navigation Switcher */}
-      <div className="flex items-center gap-2 border-b border-slate-200 pb-2">
-        <button
-          onClick={() => setSubTab('invoices')}
-          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-            subTab === 'invoices'
-              ? 'bg-slate-900 text-white shadow-xs'
-              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-          }`}
-        >
-          <Icon name="Receipt" className="w-4 h-4" />
-          <span>Sales Invoices</span>
-          <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
-            subTab === 'invoices' ? 'bg-slate-800 text-slate-200' : 'bg-slate-200 text-slate-700'
-          }`}>
-            {allInvoices.length}
-          </span>
-        </button>
-
-        <button
-          onClick={() => setSubTab('approvals')}
-          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-            subTab === 'approvals'
-              ? 'bg-amber-600 text-white shadow-xs'
-              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-          }`}
-        >
-          <Icon name="CheckCircle2" className="w-4 h-4" />
-          <span>Approval Workflow</span>
-          {pendingApprovalInvoices.length > 0 ? (
-            <span className="bg-amber-400 text-amber-950 font-black px-2 py-0.5 rounded-full text-[10px] animate-pulse">
-              {pendingApprovalInvoices.length} Pending
-            </span>
-          ) : (
-            <span className="bg-slate-200 text-slate-700 px-1.5 py-0.2 rounded-full text-[10px] font-mono">
-              0
-            </span>
-          )}
-        </button>
+      <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 pb-3">
+        {[
+          { id: 'invoices', label: 'Sale Invoices', icon: 'Receipt', count: allInvoices.length },
+          { id: 'payment-in', label: 'Payment - In', icon: 'CreditCard', count: (state.paymentsIn || []).length },
+          { id: 'credit-notes', label: 'Sale Return (Credit Note)', icon: 'RotateCcw', count: (state.salesReturns || []).length },
+          { id: 'orders', label: 'Sale Order', icon: 'ShoppingCart', count: (state.salesOrders || []).length },
+          { id: 'approvals', label: 'Approvals', icon: 'CheckCircle2', count: pendingApprovalInvoices.length, highlight: pendingApprovalInvoices.length > 0 }
+        ].map((tab) => (
+          <button
+            key={tab.id}
+            onClick={() => {
+              setSubTab(tab.id);
+              setSelectedInvoice(null);
+            }}
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+              subTab === tab.id
+                ? 'bg-slate-900 text-white shadow-xs'
+                : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200/80 hover:text-slate-900'
+            }`}
+          >
+            <Icon name={tab.icon} className="w-3.5 h-3.5" />
+            <span>{tab.label}</span>
+            {tab.count !== undefined && (
+              <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
+                tab.highlight 
+                  ? 'bg-amber-400 text-amber-950 font-black animate-pulse'
+                  : (subTab === tab.id ? 'bg-slate-800 text-slate-200' : 'bg-slate-100 text-slate-600')
+              }`}>
+                {tab.count}
+              </span>
+            )}
+          </button>
+        ))}
       </div>
+
+      {subTab === 'payment-in' && <PaymentInTab />}
+      {subTab === 'credit-notes' && <CreditNotesTab />}
+      {subTab === 'orders' && <SalesOrdersTab onNavigate={onNavigate} />}
 
       {/* ========================================================= */}
       {/* TAB 1: SALES INVOICES MANAGEMENT */}

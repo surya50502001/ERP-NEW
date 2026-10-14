@@ -694,3 +694,168 @@ BEGIN
     );
 END
 GO
+
+-- 24. PurchaseBills & Items
+IF OBJECT_ID('PurchaseBills', 'U') IS NULL
+BEGIN
+    CREATE TABLE PurchaseBills (
+        Id INT IDENTITY(1,1) PRIMARY KEY,
+        BillNo NVARCHAR(50) NOT NULL DEFAULT '',
+        BillDate DATETIME2 NOT NULL DEFAULT GETUTCDATE(),
+        DueDate DATETIME2 NULL,
+        SupplierId NVARCHAR(50) NULL,
+        SupplierName NVARCHAR(200) NOT NULL DEFAULT '',
+        TotalAmount DECIMAL(18,2) NOT NULL DEFAULT 0,
+        Status NVARCHAR(50) NOT NULL DEFAULT 'Unpaid',
+        Notes NVARCHAR(500) NULL
+    );
+END
+GO
+
+IF OBJECT_ID('PurchaseBillItem', 'U') IS NULL
+BEGIN
+    CREATE TABLE PurchaseBillItem (
+        Id INT IDENTITY(1,1) PRIMARY KEY,
+        PurchaseBillId INT NOT NULL,
+        ProductId NVARCHAR(50) NOT NULL DEFAULT '',
+        ProductName NVARCHAR(200) NOT NULL DEFAULT '',
+        Qty DECIMAL(18,2) NOT NULL DEFAULT 0,
+        Rate DECIMAL(18,2) NOT NULL DEFAULT 0,
+        Amount DECIMAL(18,2) NOT NULL DEFAULT 0,
+        CONSTRAINT FK_PurchaseBillItem_PurchaseBills FOREIGN KEY (PurchaseBillId) REFERENCES PurchaseBills(Id) ON DELETE CASCADE
+    );
+END
+GO
+
+-- 25. PaymentsOut
+IF OBJECT_ID('PaymentsOut', 'U') IS NULL
+BEGIN
+    CREATE TABLE PaymentsOut (
+        Id INT IDENTITY(1,1) PRIMARY KEY,
+        PaymentId NVARCHAR(50) NOT NULL DEFAULT '',
+        Date DATETIME2 NOT NULL DEFAULT GETUTCDATE(),
+        SupplierId NVARCHAR(50) NULL,
+        SupplierName NVARCHAR(200) NOT NULL DEFAULT '',
+        Amount DECIMAL(18,2) NOT NULL DEFAULT 0,
+        PaymentMode NVARCHAR(50) NOT NULL DEFAULT 'Bank Transfer',
+        ReferenceNo NVARCHAR(100) NULL,
+        BillRef NVARCHAR(50) NULL,
+        Notes NVARCHAR(500) NULL,
+        Status NVARCHAR(50) NOT NULL DEFAULT 'Paid'
+    );
+END
+GO
+
+-- 26. PurchaseReturns (Debit Notes) & Items
+IF OBJECT_ID('PurchaseReturns', 'U') IS NULL
+BEGIN
+    CREATE TABLE PurchaseReturns (
+        Id INT IDENTITY(1,1) PRIMARY KEY,
+        ReturnId NVARCHAR(50) NOT NULL DEFAULT '',
+        Date DATETIME2 NOT NULL DEFAULT GETUTCDATE(),
+        SupplierId NVARCHAR(50) NULL,
+        SupplierName NVARCHAR(200) NOT NULL DEFAULT '',
+        ReturnAmount DECIMAL(18,2) NOT NULL DEFAULT 0,
+        Reason NVARCHAR(200) NOT NULL DEFAULT 'Defective / Quality Return',
+        Status NVARCHAR(50) NOT NULL DEFAULT 'Adjusted'
+    );
+END
+GO
+
+IF OBJECT_ID('PurchaseReturnItem', 'U') IS NULL
+BEGIN
+    CREATE TABLE PurchaseReturnItem (
+        Id INT IDENTITY(1,1) PRIMARY KEY,
+        PurchaseReturnId INT NOT NULL,
+        ProductId NVARCHAR(50) NOT NULL DEFAULT '',
+        ProductName NVARCHAR(200) NOT NULL DEFAULT '',
+        Qty DECIMAL(18,2) NOT NULL DEFAULT 0,
+        Rate DECIMAL(18,2) NOT NULL DEFAULT 0,
+        Amount DECIMAL(18,2) NOT NULL DEFAULT 0,
+        CONSTRAINT FK_PurchaseReturnItem_PurchaseReturns FOREIGN KEY (PurchaseReturnId) REFERENCES PurchaseReturns(Id) ON DELETE CASCADE
+    );
+END
+GO
+
+-- 27. PaymentsIn
+IF OBJECT_ID('PaymentsIn', 'U') IS NULL
+BEGIN
+    CREATE TABLE PaymentsIn (
+        Id INT IDENTITY(1,1) PRIMARY KEY,
+        PaymentId NVARCHAR(50) NOT NULL DEFAULT '',
+        Date DATETIME2 NOT NULL DEFAULT GETUTCDATE(),
+        CustomerId NVARCHAR(50) NULL,
+        CustomerName NVARCHAR(200) NOT NULL DEFAULT '',
+        Amount DECIMAL(18,2) NOT NULL DEFAULT 0,
+        PaymentMode NVARCHAR(50) NOT NULL DEFAULT 'Bank Transfer',
+        ReferenceNo NVARCHAR(100) NULL,
+        InvoiceRef NVARCHAR(50) NULL,
+        Notes NVARCHAR(500) NULL,
+        Status NVARCHAR(50) NOT NULL DEFAULT 'Received'
+    );
+END
+GO
+
+-- 28. SalesReturns (Credit Notes) & Items
+IF OBJECT_ID('SalesReturns', 'U') IS NULL
+BEGIN
+    CREATE TABLE SalesReturns (
+        Id INT IDENTITY(1,1) PRIMARY KEY,
+        ReturnId NVARCHAR(50) NOT NULL DEFAULT '',
+        Date DATETIME2 NOT NULL DEFAULT GETUTCDATE(),
+        CustomerId NVARCHAR(50) NULL,
+        CustomerName NVARCHAR(200) NOT NULL DEFAULT '',
+        RefundAmount DECIMAL(18,2) NOT NULL DEFAULT 0,
+        Reason NVARCHAR(200) NOT NULL DEFAULT 'Customer Return',
+        Status NVARCHAR(50) NOT NULL DEFAULT 'Credited'
+    );
+END
+GO
+
+IF OBJECT_ID('SalesReturnItem', 'U') IS NULL
+BEGIN
+    CREATE TABLE SalesReturnItem (
+        Id INT IDENTITY(1,1) PRIMARY KEY,
+        SalesReturnId INT NOT NULL,
+        ProductId NVARCHAR(50) NOT NULL DEFAULT '',
+        ProductName NVARCHAR(200) NOT NULL DEFAULT '',
+        Qty DECIMAL(18,2) NOT NULL DEFAULT 0,
+        Rate DECIMAL(18,2) NOT NULL DEFAULT 0,
+        Amount DECIMAL(18,2) NOT NULL DEFAULT 0,
+        CONSTRAINT FK_SalesReturnItem_SalesReturns FOREIGN KEY (SalesReturnId) REFERENCES SalesReturns(Id) ON DELETE CASCADE
+    );
+END
+GO
+
+-- 29. SalesOrders & Items
+IF OBJECT_ID('SalesOrders', 'U') IS NULL
+BEGIN
+    CREATE TABLE SalesOrders (
+        Id INT IDENTITY(1,1) PRIMARY KEY,
+        OrderId NVARCHAR(50) NOT NULL DEFAULT '',
+        Date DATETIME2 NOT NULL DEFAULT GETUTCDATE(),
+        DeliveryDate DATETIME2 NULL,
+        CustomerId NVARCHAR(50) NULL,
+        CustomerName NVARCHAR(200) NOT NULL DEFAULT '',
+        TotalAmount DECIMAL(18,2) NOT NULL DEFAULT 0,
+        Status NVARCHAR(50) NOT NULL DEFAULT 'Confirmed',
+        Notes NVARCHAR(500) NULL
+    );
+END
+GO
+
+IF OBJECT_ID('SalesOrderItem', 'U') IS NULL
+BEGIN
+    CREATE TABLE SalesOrderItem (
+        Id INT IDENTITY(1,1) PRIMARY KEY,
+        SalesOrderId INT NOT NULL,
+        ProductId NVARCHAR(50) NOT NULL DEFAULT '',
+        ProductName NVARCHAR(200) NOT NULL DEFAULT '',
+        Qty DECIMAL(18,2) NOT NULL DEFAULT 0,
+        Rate DECIMAL(18,2) NOT NULL DEFAULT 0,
+        Amount DECIMAL(18,2) NOT NULL DEFAULT 0,
+        CONSTRAINT FK_SalesOrderItem_SalesOrders FOREIGN KEY (SalesOrderId) REFERENCES SalesOrders(Id) ON DELETE CASCADE
+    );
+END
+GO
+

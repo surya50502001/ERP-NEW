@@ -1,0 +1,9 @@
+{
+  "appId": "com.primeerp.app",
+  "appName": "Prime ERP",
+  "webDir": "dist",
+  "server": {
+    "androidScheme": "https",
+    "cleartext": true
+  }
+}

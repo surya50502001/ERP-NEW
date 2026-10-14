@@ -7,6 +7,8 @@ import Combobox from '../components/Combobox';
 import Drawer from '../components/Drawer';
 import StatusBadge from '../components/StatusBadge';
 import { useERP } from '../context/ERPContext';
+import QuickCreatePartyModal from '../components/QuickCreatePartyModal';
+import QuickCreateProductModal from '../components/QuickCreateProductModal';
 
 export default function InventoryView({ onNavigate }) {
   const { state, receiveGoods, createDirectGRN, addParty, addProduct, navResetCounter } = useERP();
@@ -27,6 +29,10 @@ export default function InventoryView({ onNavigate }) {
   const [poGrnNotes, setPoGrnNotes] = useState('');
   const [poGrnDcNo, setPoGrnDcNo] = useState('');
   const [poSearchQuery, setPoSearchQuery] = useState('');
+
+  // Quick Create Modals
+  const [quickPartyModal, setQuickPartyModal] = useState({ isOpen: false, name: '', type: 'Supplier' });
+  const [quickProductModal, setQuickProductModal] = useState({ isOpen: false, name: '', itemIndex: null });
 
   // Direct GRN State
   const [isDirectGRNModalOpen, setIsDirectGRNModalOpen] = useState(false);
@@ -763,11 +769,12 @@ export default function InventoryView({ onNavigate }) {
             <Combobox
               label="Supplier / Source Party"
               placeholder="Select or search party..."
+              entityName="Party"
               options={(state.parties || []).map(p => ({ label: p.name, value: p.id, sublabel: p.partyType || p.type }))}
               value={directSupplierId}
               onChange={(val) => setDirectSupplierId(val)}
-              onCreateNew={() => setIsQuickPartyOpen(true)}
-              createLabel="+ Add new supplier inline"
+              onCreateNew={(term) => setQuickPartyModal({ isOpen: true, name: term, type: 'Supplier' })}
+              createLabel="+ Create new party"
             />
           </div>
 
@@ -817,71 +824,99 @@ export default function InventoryView({ onNavigate }) {
               </Button>
             </div>
 
-            {directItems.map((item, idx) => {
-              const selectedP = allProducts.find(p => p.id === item.productId);
-              return (
-                <div key={idx} className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="font-bold text-slate-700">Line #{idx + 1}</span>
-                    {directItems.length > 1 && (
-                      <button
-                        onClick={() => handleRemoveDirectItemRow(idx)}
-                        className="text-rose-500 hover:text-rose-700 cursor-pointer text-xs font-semibold"
-                      >
-                        Remove
-                      </button>
-                    )}
+            <div className="border border-slate-200 rounded-xl bg-white shadow-2xs divide-y divide-slate-100 overflow-visible">
+              {/* Table Header */}
+              <div className="hidden sm:grid grid-cols-12 gap-2 sm:gap-3 px-3 py-2 bg-slate-50/80 rounded-t-xl text-[11px] font-bold text-slate-500 uppercase tracking-wider border-b border-slate-200">
+                <div className="col-span-1 text-center">#</div>
+                <div className="col-span-4">Product / Item</div>
+                <div className="col-span-2 text-right">Inward Qty</div>
+                <div className="col-span-2 text-right">Rate (₹)</div>
+                <div className="col-span-2">Batch No</div>
+                <div className="col-span-1 text-center"></div>
+              </div>
+
+              {/* Item Rows */}
+              {directItems.map((item, idx) => (
+                <div key={idx} className="flex flex-col sm:grid sm:grid-cols-12 gap-2 sm:gap-3 p-2.5 sm:px-3 sm:py-2 items-center hover:bg-slate-50/60 transition-colors">
+                  <div className="hidden sm:block col-span-1 text-center font-bold text-xs text-slate-400">
+                    {idx + 1}
                   </div>
-
-                  <Combobox
-                    label="Select Product"
-                    placeholder="Search product..."
-                    options={allProducts.map(p => ({ label: p.name, value: p.id, sublabel: `Stock: ${p.availableStock} ${p.uom}` }))}
-                    value={item.productId}
-                    onChange={(val) => {
-                      const prod = allProducts.find(p => p.id === val);
-                      const updated = [...directItems];
-                      updated[idx] = { ...updated[idx], productId: val, rate: prod ? prod.avgRate : 150 };
-                      setDirectItems(updated);
-                    }}
-                    onCreateNew={() => setIsQuickProductOpen(true)}
-                    createLabel="+ Create product inline"
-                  />
-
-                  <div className="grid grid-cols-3 gap-2">
-                    <Input
-                      label="Inward Qty"
-                      type="number"
-                      value={item.qty}
-                      onChange={(e) => {
+                  <div className="w-full sm:col-span-4">
+                    <Combobox
+                      placeholder="Search product..."
+                      entityName="Product"
+                      options={allProducts.map(p => ({ label: p.name, value: p.id, sublabel: `Stock: ${p.availableStock} ${p.uom}` }))}
+                      value={item.productId}
+                      onChange={(val) => {
+                        const prod = allProducts.find(p => p.id === val);
                         const updated = [...directItems];
-                        updated[idx].qty = e.target.value;
+                        updated[idx] = { ...updated[idx], productId: val, rate: prod ? prod.avgRate : 150 };
                         setDirectItems(updated);
                       }}
+                      onCreateNew={(term) => setQuickProductModal({ isOpen: true, name: term, itemIndex: idx })}
+                      createLabel="+ Create product"
                     />
-                    <Input
-                      label="Unit Rate (₹)"
-                      type="number"
-                      value={item.rate}
-                      onChange={(e) => {
-                        const updated = [...directItems];
-                        updated[idx].rate = e.target.value;
-                        setDirectItems(updated);
-                      }}
-                    />
-                    <Input
-                      label="Batch No"
-                      value={item.batchNo}
-                      onChange={(e) => {
-                        const updated = [...directItems];
-                        updated[idx].batchNo = e.target.value;
-                        setDirectItems(updated);
-                      }}
-                    />
+                  </div>
+                  <div className="flex sm:contents items-center gap-2 w-full">
+                    <div className="flex-1 sm:col-span-2">
+                      <input
+                        type="number"
+                        min="0"
+                        step="any"
+                        placeholder="Qty"
+                        className="w-full text-right py-1.5 px-2.5 text-xs rounded-lg border border-slate-200 bg-white font-mono focus:outline-none focus:border-slate-900 focus:ring-1 focus:ring-slate-900"
+                        value={item.qty}
+                        onChange={(e) => {
+                          const updated = [...directItems];
+                          updated[idx].qty = e.target.value;
+                          setDirectItems(updated);
+                        }}
+                      />
+                    </div>
+                    <div className="flex-1 sm:col-span-2">
+                      <input
+                        type="number"
+                        min="0"
+                        step="any"
+                        placeholder="Rate"
+                        className="w-full text-right py-1.5 px-2.5 text-xs rounded-lg border border-slate-200 bg-white font-mono focus:outline-none focus:border-slate-900 focus:ring-1 focus:ring-slate-900"
+                        value={item.rate}
+                        onChange={(e) => {
+                          const updated = [...directItems];
+                          updated[idx].rate = e.target.value;
+                          setDirectItems(updated);
+                        }}
+                      />
+                    </div>
+                    <div className="flex-1 sm:col-span-2">
+                      <input
+                        type="text"
+                        placeholder="Batch No"
+                        className="w-full py-1.5 px-2.5 text-xs rounded-lg border border-slate-200 bg-white font-mono focus:outline-none focus:border-slate-900 focus:ring-1 focus:ring-slate-900"
+                        value={item.batchNo}
+                        onChange={(e) => {
+                          const updated = [...directItems];
+                          updated[idx].batchNo = e.target.value;
+                          setDirectItems(updated);
+                        }}
+                      />
+                    </div>
+                    <div className="sm:col-span-1 text-center">
+                      {directItems.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveDirectItemRow(idx)}
+                          className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-md transition-colors cursor-pointer"
+                          title="Remove line"
+                        >
+                          <Icon name="Trash2" className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </div>
-              );
-            })}
+              ))}
+            </div>
           </div>
 
           {/* Quick Product Form */}
@@ -908,6 +943,38 @@ export default function InventoryView({ onNavigate }) {
           />
         </div>
       </Drawer>
+
+      {/* Quick Create Modals */}
+      <QuickCreatePartyModal
+        isOpen={quickPartyModal.isOpen}
+        onClose={() => setQuickPartyModal({ isOpen: false, name: '', type: 'Supplier' })}
+        defaultType="Supplier"
+        initialName={quickPartyModal.name}
+        onCreated={(newParty) => {
+          setDirectSupplierId(newParty.id || newParty.partyId);
+        }}
+      />
+
+      <QuickCreateProductModal
+        isOpen={quickProductModal.isOpen}
+        onClose={() => setQuickProductModal({ isOpen: false, name: '', itemIndex: null })}
+        initialName={quickProductModal.name}
+        onCreated={(newProd) => {
+          if (quickProductModal.itemIndex !== null && quickProductModal.itemIndex !== undefined) {
+            const idx = quickProductModal.itemIndex;
+            const pid = newProd.id || newProd.productId;
+            const updated = [...directItems];
+            if (updated[idx]) {
+              updated[idx] = {
+                ...updated[idx],
+                productId: pid,
+                rate: newProd.purchaseRate || newProd.avgRate || 150
+              };
+              setDirectItems(updated);
+            }
+          }
+        }}
+      />
 
       {/* ========================================================= */}
       {/* DRAWER: PRODUCT FIFO BATCH DETAILS */}

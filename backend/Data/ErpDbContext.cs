@@ -34,6 +34,12 @@ public class ErpDbContext : DbContext
     public DbSet<Uom> Uoms => Set<Uom>();
     public DbSet<PurchaseOrder> PurchaseOrders => Set<PurchaseOrder>();
     public DbSet<SalesInvoice> SalesInvoices => Set<SalesInvoice>();
+    public DbSet<PurchaseBill> PurchaseBills => Set<PurchaseBill>();
+    public DbSet<PaymentOut> PaymentsOut => Set<PaymentOut>();
+    public DbSet<PurchaseReturn> PurchaseReturns => Set<PurchaseReturn>();
+    public DbSet<PaymentIn> PaymentsIn => Set<PaymentIn>();
+    public DbSet<SalesReturn> SalesReturns => Set<SalesReturn>();
+    public DbSet<SalesOrder> SalesOrders => Set<SalesOrder>();
     public DbSet<Batch> Batches => Set<Batch>();
     public DbSet<Notification> Notifications => Set<Notification>();
     public DbSet<RecentActivity> RecentActivities => Set<RecentActivity>();
@@ -98,6 +104,30 @@ public class ErpDbContext : DbContext
             .HasOne(d => d.Header)
             .WithMany(h => h.Details)
             .HasForeignKey(d => new { d.CompCode, d.RecYr, d.RecSr, d.RecNo })
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<PurchaseBill>()
+            .HasMany(b => b.Items)
+            .WithOne()
+            .HasForeignKey(i => i.PurchaseBillId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<PurchaseReturn>()
+            .HasMany(r => r.Items)
+            .WithOne()
+            .HasForeignKey(i => i.PurchaseReturnId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<SalesReturn>()
+            .HasMany(r => r.Items)
+            .WithOne()
+            .HasForeignKey(i => i.SalesReturnId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<SalesOrder>()
+            .HasMany(o => o.Items)
+            .WithOne()
+            .HasForeignKey(i => i.SalesOrderId)
             .OnDelete(DeleteBehavior.Cascade);
 
         // Decimal precision mappings
