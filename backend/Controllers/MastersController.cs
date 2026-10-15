@@ -1,9 +1,11 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using ErpBackend.DTOs;
 using ErpBackend.Services;
 
 namespace ErpBackend.Controllers;
 
+[Authorize]
 [ApiController]
 [Route("api/[controller]")]
 public class MastersController : ControllerBase
@@ -204,6 +206,7 @@ public class MastersController : ControllerBase
     #endregion
 
     #region Seed
+    [Authorize(Roles = "Admin")]
     [HttpPost("seed")]
     public async Task<IActionResult> SeedDefaultMasters()
     {

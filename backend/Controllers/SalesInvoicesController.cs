@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using ErpBackend.Data;
@@ -5,6 +6,7 @@ using ErpBackend.Models;
 
 namespace ErpBackend.Controllers;
 
+[Authorize]
 [ApiController]
 [Route("api/[controller]")]
 public class SalesInvoicesController : ControllerBase

@@ -1325,7 +1325,7 @@ export function ERPProvider({ children }) {
         throw new Error(data.message || `Login failed (Status ${res.status})`);
       }
       
-      const userObj = { id: data.id, fullName: data.fullName, companyName: data.companyName || 'My Enterprise', email: data.email, role: data.role, token: data.token };
+      const userObj = { id: data.userId || data.id, fullName: data.fullName, companyName: data.companyName || 'My Enterprise', email: data.email, role: data.role, token: data.token };
       setCurrentUser(userObj);
       localStorage.setItem('PRIME_ERP_USER', JSON.stringify(userObj));
       localStorage.setItem('PRIME_ERP_TOKEN', data.token);
@@ -1352,7 +1352,7 @@ export function ERPProvider({ children }) {
         throw new Error(data.message || `Registration failed (Status ${res.status})`);
       }
 
-      const userObj = { id: data.id, fullName: data.fullName, companyName: data.companyName || companyName || 'My Enterprise', email: data.email, role: data.role, token: data.token };
+      const userObj = { id: data.userId || data.id, fullName: data.fullName, companyName: data.companyName || companyName || 'My Enterprise', email: data.email, role: data.role, token: data.token };
       setCurrentUser(userObj);
       localStorage.setItem('PRIME_ERP_USER', JSON.stringify(userObj));
       localStorage.setItem('PRIME_ERP_TOKEN', data.token);

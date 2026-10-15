@@ -1,20 +1,19 @@
-# Build stage
-FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
-WORKDIR /src
-COPY ["backend/ErpBackend.csproj", "backend/"]
-RUN dotnet restore "backend/ErpBackend.csproj"
-COPY backend/ backend/
-WORKDIR "/src/backend"
-RUN dotnet build "ErpBackend.csproj" -c Release -o /app/build
-
-# Publish stage
-FROM build AS publish
-RUN dotnet publish "ErpBackend.csproj" -c Release -o /app/publish /p:UseAppHost=false
-
-# Final runtime stage
-FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS final
+# Stage 1: Build the React + Vite frontend
+FROM node:20-alpine AS build
 WORKDIR /app
-EXPOSE 8080
-ENV ASPNETCORE_URLS=http://+:8080
-COPY --from=publish /app/publish .
-ENTRYPOINT ["dotnet", "ErpBackend.dll"]
+
+# Install dependencies
+COPY package*.json ./
+RUN npm ci
+
+# Copy source code and build production bundle
+COPY . .
+RUN npm run build
+
+# Stage 2: Serve production bundle with Nginx
+FROM nginx:alpine AS final
+COPY --from=build /app/dist /usr/share/nginx/html
+COPY nginx.conf /etc/nginx/conf.d/default.conf
+
+EXPOSE 80
+CMD ["nginx", "-g", "daemon off;"]

@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using ErpBackend.DTOs;
 using ErpBackend.Services;
@@ -15,6 +16,7 @@ public class AuthController : ControllerBase
         _authService = authService;
     }
 
+    [AllowAnonymous]
     [HttpPost("login")]
     public async Task<IActionResult> Login([FromBody] LoginRequestDto request)
     {
@@ -33,6 +35,7 @@ public class AuthController : ControllerBase
         }
     }
 
+    [AllowAnonymous]
     [HttpPost("register")]
     public async Task<IActionResult> Register([FromBody] RegisterRequestDto request)
     {
@@ -51,6 +54,7 @@ public class AuthController : ControllerBase
         }
     }
 
+    [Authorize]
     [HttpGet("profile")]
     public async Task<IActionResult> GetProfile([FromQuery] string email)
     {
@@ -59,6 +63,7 @@ public class AuthController : ControllerBase
         return Ok(profile);
     }
 
+    [Authorize(Roles = "Admin")]
     [HttpGet("users")]
     public async Task<IActionResult> GetAllUsers()
     {
@@ -73,6 +78,7 @@ public class AuthController : ControllerBase
         }
     }
 
+    [Authorize(Roles = "Admin")]
     [HttpDelete("users/{userId}")]
     public async Task<IActionResult> DeleteUser(string userId)
     {
@@ -81,6 +87,7 @@ public class AuthController : ControllerBase
         return Ok(new { message = "User deleted successfully." });
     }
 
+    [Authorize(Roles = "Admin")]
     [HttpPut("users/{userId}/role")]
     public async Task<IActionResult> UpdateUserRole(string userId, [FromBody] UpdateRoleRequest request)
     {
